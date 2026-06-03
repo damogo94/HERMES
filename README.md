@@ -58,22 +58,32 @@ hermes markets -q bitcoin -n 5  # busca por texto
 hermes scan                   # detecta arbitraje YES/NO en mercados activos
 hermes scan -n 60 -e 0.005    # escanea 60 mercados, edge mín 0.5%
 hermes backtest -q bitcoin    # backtest mark-to-market de una estrategia
+hermes validate -m 25         # validación out-of-sample (train/test, costes, baseline)
+hermes paper -q bitcoin --size 10  # pasa una orden por riesgo+ejecución (DRY-RUN)
+hermes journal                # historial de órdenes simuladas
 ```
 
-Todo es solo lectura; nada de esto necesita wallet.
+Todo es solo lectura/simulación; nada de esto necesita wallet ni envía órdenes.
 
 ## Estado
 
-**Fase 3** — backtesting (solo lectura + simulación):
-- Capa de datos: `GammaClient`, `ClobReadClient`, `ArchiveClient`.
+**Fase 4** — riesgo + ejecución en DRY-RUN:
+- Datos: `GammaClient`, `ClobReadClient`, `ArchiveClient`.
 - Inteligencia: `ArbitrageDetector` + `Scanner` (`hermes scan`).
-- Backtest: `Backtester` (motor mark-to-market), `MeanReversion`, métricas
-  (`summarize`) y `hermes backtest`.
+- Backtest + validación: `Backtester`, `MeanReversion`, `validate` (train/test,
+  costes, baseline buy&hold).
+- **Riesgo**: `RiskManager` (topes por trade/hora/total + kill-switch).
+- **Ejecución**: `Executor`, único punto por el que pasa una orden:
+  `riesgo → DRY-RUN (simula, no envía) → ruta live BLOQUEADA hasta Fase 5`.
+  Todo queda en un `journal` JSONL.
 
-> ⚠️ El histórico de precios solo está disponible para mercados **abiertos**, así
-> que el backtest es mark-to-market (no hold-to-resolution). Los resultados de un
-> solo mercado, sin fees ni out-of-sample, **NO** demuestran edge — son para
-> validar el motor. La validación seria (multi-mercado, train/test, costes) es lo
-> siguiente.
+### Garantía de seguridad
 
-Aún sin riesgo ni ejecución.
+En el estado actual es **imposible** que HERMES envíe una orden real: aunque
+pongas `HERMES_DRY_RUN=false`, la ruta de envío está deliberadamente sin
+implementar (Fase 5) y devuelve `blocked`. Además, `HERMES_KILL_SWITCH=true` o un
+fichero `data_store/STOP` detienen todo.
+
+> ⚠️ El backtest reveló que `MeanReversion` **no tiene edge fiable** (overfit:
+> train ≈ 2× test). HERMES tiene la fontanería lista pero **no una estrategia
+> ganadora** — debe seguir en paper hasta que una estrategia pase `validate`.

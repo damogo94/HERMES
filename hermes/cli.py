@@ -189,6 +189,96 @@ def _cmd_validate(args: argparse.Namespace) -> None:
     print(" real (en céntimos). Fíate del VEREDICTO y de train≈test, no de la magnitud.")
 
 
+def _cmd_paper(args: argparse.Namespace) -> None:
+    try:
+        from hermes.backtest.data import pick_market
+        from hermes.data.clob import ClobReadClient
+        from hermes.data.gamma import GammaClient
+        from hermes.execution.executor import Executor
+        from hermes.execution.models import OrderIntent
+    except ImportError:
+        print("Faltan dependencias. Instala con: pip install -e .")
+        return
+
+    gamma, clob = GammaClient(), ClobReadClient()
+    try:
+        market = pick_market(gamma, query=args.query)
+        if market is None or not market.token_yes:
+            print("No se encontró un mercado activo adecuado.")
+            return
+        token = market.token_yes
+        price = args.price
+        if price is None:
+            try:
+                book = clob.get_order_book(token)
+                price = book.best_ask if args.side == "buy" else book.best_bid
+            except Exception:  # noqa: BLE001
+                price = None
+            if price is None:
+                price = market.yes_price
+    finally:
+        gamma.close()
+        clob.close()
+
+    if price is None:
+        print("No pude determinar el precio; pasa --price.")
+        return
+
+    intent = OrderIntent(
+        market_id=market.id,
+        token_id=token,
+        side=args.side.upper(),
+        price=float(price),
+        size_usd=args.size,
+        reason="paper (manual)",
+    )
+    order = Executor().submit(intent)
+
+    label = {
+        "dry_run": "SIMULADA (no enviada)",
+        "rejected": "RECHAZADA por riesgo",
+        "blocked": "BLOQUEADA (ejecución real no implementada)",
+    }.get(order.status, order.status)
+
+    print(_LINE)
+    print(f" PAPER: {market.question[:50]}")
+    print(_LINE)
+    print(f" intent ... {intent.side} YES  ${intent.size_usd:.2f} @ {intent.price:.3f}")
+    print(f" estado ... {order.status.upper()}  →  {label}")
+    print(f" motivo ... {order.reason}")
+    print(_LINE)
+    print(" Registrado en el journal. No se ha enviado nada real.")
+
+
+def _cmd_journal(args: argparse.Namespace) -> None:
+    try:
+        from hermes.execution.journal import Journal
+    except ImportError:
+        print("Faltan dependencias. Instala con: pip install -e .")
+        return
+    import datetime as _dt
+
+    entries = Journal().tail(args.limit)
+    print(_LINE)
+    print(f" Journal — últimas {len(entries)} entradas")
+    print(_LINE)
+    if not entries:
+        print(" (vacío)")
+        return
+    for e in entries:
+        ts = e.get("ts")
+        when = (
+            _dt.datetime.fromtimestamp(ts, _dt.timezone.utc).strftime("%Y-%m-%d %H:%M")
+            if ts else "?"
+        )
+        it = e.get("intent", {})
+        print(
+            f" {when}  {e.get('status', '?'):8}  "
+            f"{it.get('side', '?')} ${it.get('size_usd', 0):.2f} @ {it.get('price', 0):.3f}  "
+            f"{e.get('reason', '')[:38]}"
+        )
+
+
 def main() -> None:
     # Salida UTF-8 en consolas Windows (evita mojibake con acentos y «—»).
     try:
@@ -237,6 +327,15 @@ def main() -> None:
     p_val.add_argument("--slippage", type=float, default=0.01, help="Slippage por fill (fracción).")
     p_val.add_argument("--split", type=float, default=0.5, help="Proporción train (resto = test).")
 
+    p_paper = sub.add_parser("paper", help="Pasa un OrderIntent por riesgo+ejecución (DRY-RUN).")
+    p_paper.add_argument("-q", "--query", default=None, help="Mercado (texto). Si no, el primero activo.")
+    p_paper.add_argument("--side", choices=["buy", "sell"], default="buy", help="Lado.")
+    p_paper.add_argument("--size", type=float, default=10.0, help="Nocional en USDC.")
+    p_paper.add_argument("--price", type=float, default=None, help="Precio límite (si no, best ask/bid).")
+
+    p_journal = sub.add_parser("journal", help="Muestra el journal de órdenes simuladas.")
+    p_journal.add_argument("-n", "--limit", type=int, default=15, help="Entradas a mostrar.")
+
     args = parser.parse_args()
 
     if args.command == "markets":
@@ -247,6 +346,10 @@ def main() -> None:
         _cmd_backtest(args)
     elif args.command == "validate":
         _cmd_validate(args)
+    elif args.command == "paper":
+        _cmd_paper(args)
+    elif args.command == "journal":
+        _cmd_journal(args)
     else:  # status (por defecto)
         _cmd_status(args)
 

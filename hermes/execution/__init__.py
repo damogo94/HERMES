@@ -1,9 +1,12 @@
 """
-Capa de ejecución (Fase 5) — ÚNICO módulo que toca la clave privada.
+Capa de ejecución (Fase 4: DRY-RUN; Fase 5: envío real).
 
-Firma y envía órdenes vía el SDK oficial de Polymarket. Respeta el flag
-DRY_RUN: si está activo, construye y REGISTRA la orden pero NUNCA la
-transmite. Aislada a propósito del resto del sistema.
+Único módulo que (en la Fase 5) tocará la clave privada. Hoy opera solo en
+DRY-RUN: el ``Executor`` construye y registra órdenes pero NUNCA las transmite,
+y la ruta de envío real está deliberadamente bloqueada.
 
-Pendiente de implementar en la Fase 5. No requiere wallet hasta entonces.
+Para evitar imports circulares, importa los submódulos directamente:
+    from hermes.execution.executor import Executor
+    from hermes.execution.models import OrderIntent, Order
+    from hermes.execution.journal import Journal
 """

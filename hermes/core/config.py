@@ -48,6 +48,7 @@ def _as_float(name: str, default: float) -> float:
 class Settings:
     # ---- Seguridad ----
     dry_run: bool = True
+    kill_switch: bool = False     # corta TODA operación si True (o si existe data_dir/STOP)
     venue: str = "polymarket"
 
     # ---- Límites de riesgo (USDC) — se aplican a partir de la fase 4 ----
@@ -94,6 +95,7 @@ def get_settings() -> Settings:
     """Devuelve la configuración (cacheada) leída del entorno/.env."""
     return Settings(
         dry_run=_as_bool("HERMES_DRY_RUN", True),
+        kill_switch=_as_bool("HERMES_KILL_SWITCH", False),
         venue=os.getenv("HERMES_VENUE", "polymarket"),
         max_usd_per_trade=_as_float("HERMES_MAX_USD_PER_TRADE", 10.0),
         max_usd_per_hour=_as_float("HERMES_MAX_USD_PER_HOUR", 50.0),
