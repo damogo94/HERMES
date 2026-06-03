@@ -1,8 +1,26 @@
 """
 Capa de datos (Fase 1) — SOLO LECTURA.
 
-Ingesta de datos de mercado: histórico (p. ej. archive.pmxt.dev) y en vivo
-(Gamma / CLOB REST + WebSocket). No firma ni envía nada.
+Ingesta de datos de mercado: histórico (archive.pmxt.dev) y en vivo
+(Gamma / CLOB REST). No firma ni envía nada.
 
-Pendiente de implementar en la Fase 1.
+Clientes:
+    GammaClient     — metadatos de mercados (gamma-api.polymarket.com)
+    ClobReadClient  — order book / precios (clob.polymarket.com)
+    ArchiveClient   — snapshots históricos en Parquet (pmxt)
 """
+
+from hermes.data.archive import ArchiveClient
+from hermes.data.clob import ClobReadClient
+from hermes.data.gamma import GammaClient
+from hermes.data.models import Market, OrderBook, OrderLevel, Trade
+
+__all__ = [
+    "GammaClient",
+    "ClobReadClient",
+    "ArchiveClient",
+    "Market",
+    "OrderBook",
+    "OrderLevel",
+    "Trade",
+]

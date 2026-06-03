@@ -28,3 +28,11 @@ TRADING_APPROVAL_SPENDERS = (
     NEG_RISK_CTF_EXCHANGE,
     NEG_RISK_ADAPTER,
 )
+
+# ---- Archivo histórico de pmxt (datos públicos, solo lectura) ----
+# Autoindex (listado HTML): https://archive.pmxt.dev/Polymarket/v2/
+# Descarga de ficheros (Cloudflare R2):
+PMXT_ARCHIVE_DOWNLOAD_BASE = "https://r2v2.pmxt.dev"
+# Patrón de fichero: polymarket_orderbook_YYYY-MM-DDTHH.parquet (horario, UTC)
+PMXT_ARCHIVE_FILE_TEMPLATE = "polymarket_orderbook_{stamp}.parquet"
+# OJO: cada snapshot pesa ~300-400 MB. Descarga solo las horas que necesites.

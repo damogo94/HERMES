@@ -49,9 +49,19 @@ cp .env.example .env        # Windows: copy .env.example .env
 hermes status               # o: python -m hermes
 ```
 
-`hermes status` muestra el modo (DRY-RUN), el venue, los topes de riesgo y si hay
-wallet/LLM configurados. En fase 0 no hace nada peligroso.
+Comandos disponibles:
+
+```bash
+hermes status                 # modo (DRY-RUN), venue, caps, wallet/LLM
+hermes markets                # lista mercados activos de Polymarket
+hermes markets -q bitcoin -n 5  # busca por texto
+```
+
+Todo es solo lectura; nada de esto necesita wallet.
 
 ## Estado
 
-**Fase 0** — esqueleto. Sin lógica de datos ni de trading todavía.
+**Fase 1** — capa de datos (solo lectura) implementada:
+`GammaClient` (mercados), `ClobReadClient` (order book / precios / histórico) y
+`ArchiveClient` (snapshots Parquet de pmxt). Aún sin lógica de inteligencia ni
+de trading.
