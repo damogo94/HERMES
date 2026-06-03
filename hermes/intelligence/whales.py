@@ -189,6 +189,28 @@ def verdict(report: dict) -> str:
 # --------------------------------------------------------------------------- #
 # Validación 2: walk-forward OOS (la prueba honesta de persistencia)
 # --------------------------------------------------------------------------- #
+def _candidate_wallets(data: DataAPIClient, source: str, n: int) -> list[str]:
+    """Universo de carteras candidatas.
+
+    'leaderboard' = top por beneficio (ya-ganadores: confirma, no descubre).
+    'random'      = carteras ACTIVAS aleatorias cosechadas de los trades globales
+                    (sin filtrar por beneficio: prueba si el skill se IDENTIFICA
+                    desde cero, no solo entre los top).
+    """
+    if source == "random":
+        wallets: list[str] = []
+        seen: set = set()
+        for t in data.recent_trades(limit=min(max(n * 8, 500), 1000)):
+            w = t.get("proxyWallet")
+            if w and w not in seen:
+                seen.add(w)
+                wallets.append(w)
+                if len(wallets) >= n:
+                    break
+        return wallets
+    return [w["wallet"] for w in top_whales(data, window="all", limit=n)]
+
+
 def walk_forward(
     data: DataAPIClient,
     gamma: GammaClient,
@@ -197,25 +219,29 @@ def walk_forward(
     split: float = 0.5,
     min_side: int = 5,
     window: str = "all",
+    source: str = "leaderboard",
 ) -> dict:
     """Selecciona carteras por su edge ANTES del corte T; mide solo POST-T.
 
     Compara las 'seleccionadas' (edge pre-T > 0) contra las 'no seleccionadas'
     (edge pre-T <= 0) en su rendimiento posterior. Si las seleccionadas siguen
     ganando más, la habilidad PERSISTE (edge real). Si no, era sesgo/suerte.
+
+    `source` define el universo: 'leaderboard' (confirma entre top) o 'random'
+    (descubre skill entre carteras activas cualesquiera).
     """
     cache: dict = {}
-    whales = top_whales(data, window=window, limit=universe)
+    wallets = _candidate_wallets(data, source, universe)
 
     wallet_trades: dict[str, list] = {}
     all_tokens: list[str] = []
-    for w in whales:
+    for wallet in wallets:
         try:
-            ts = data.user_trades(w["wallet"], limit=trades_per)
+            ts = data.user_trades(wallet, limit=trades_per)
         except Exception as e:  # noqa: BLE001
-            logger.debug("trades de %s fallaron: %s", w["wallet"], e)
+            logger.debug("trades de %s fallaron: %s", wallet, e)
             continue
-        wallet_trades[w["wallet"]] = ts
+        wallet_trades[wallet] = ts
         all_tokens += [str(t.get("asset", "")) for t in ts if t.get("asset")]
 
     resolve_tokens(gamma, all_tokens, cache)
@@ -254,6 +280,7 @@ def walk_forward(
             non_after += after
 
     return {
+        "source": source,
         "qualified": qualified,
         "n_selected": len(selected),
         "sel": _edge(sel_after),

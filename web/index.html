@@ -144,21 +144,22 @@
         out-of-sample (split temporal por cartera, sin look-ahead) y modela las
         fricciones de copia.</p>
         <table>
-          <thead><tr><th>Prueba</th><th class="num">Resultado</th></tr></thead>
+          <thead><tr><th>Prueba (OOS, split temporal)</th><th class="num">Edge post-corte</th></tr></thead>
           <tbody>
-            <tr><td>Edge OOS (buenas-antes, post-corte)</td><td class="num pos">+24.6 pts</td></tr>
-            <tr><td>Control (malas-antes, post-corte)</td><td class="num neg">−7.4 pts</td></tr>
-            <tr><td>Edge neto con slippage de copia 5c</td><td class="num pos">+20.2 pts</td></tr>
-            <tr><td>Trades de copia rentables</td><td class="num pos">77%</td></tr>
-            <tr><td>Breakeven slippage</td><td class="num pos">~27c</td></tr>
+            <tr><td>Universo leaderboard (con survivorship)</td><td class="num pos">+25 pts</td></tr>
+            <tr><td>Universo aleatorio — carteras activas (limpio)</td><td class="num neg">≈0 pts</td></tr>
+            <tr><td>Veredicto</td><td class="num neg">sin edge confirmado</td></tr>
           </tbody>
         </table>
         <div style="height:14px"></div>
         <div class="callout">
-          El edge sobrevive a fricciones realistas (copia 1-5c; breakeven ~27c).
-          Caveats: el universo es el leaderboard (no aleatorio); el modelo asume
-          que consigues fill; parte del edge podría ser velocidad/información no
-          copiable. Por eso HERMES sigue en <strong>paper</strong>.
+          La señal del leaderboard era <strong>survivorship</strong>: el
+          leaderboard se elige por beneficio de toda la historia (que solapa el
+          test). Al repetir la validación con un universo <strong>aleatorio</strong>
+          de carteras activas (sin filtrar por beneficio), el edge desaparece
+          (≈0): copiar "a los que van ganando" <strong>no predice el futuro</strong>.
+          whale-follow <strong>NO está validada</strong>. La disciplina acaba de
+          evitar copiar el leaderboard con dinero real — HERMES sigue en paper.
         </div>
       </div>
     </section>
@@ -215,10 +216,11 @@
         <div style="height:18px"></div>
         <div class="callout">
           <strong>Validación a un lado:</strong> el motor de <em>backtest</em> mide
-          cada estrategia sobre histórico (train/test, costes reales, baseline).
-          Una estrategia <strong>no llega a producción hasta superar esa
-          validación</strong>. whale-follow ya la supera out-of-sample; las de
-          precio (mean-reversion, momentum), no.
+          cada estrategia sobre histórico (train/test, costes reales, baseline,
+          out-of-sample). Una estrategia <strong>no llega a producción hasta
+          superar esa validación</strong>. Hasta ahora <strong>ninguna lo logra
+          con un universo limpio</strong>: las de precio pierden tras costes, y
+          whale-follow se cae al quitar el survivorship del leaderboard.
         </div>
       </div>
     </section>
@@ -254,22 +256,22 @@
           <tbody>
             <tr><td>mean reversion</td><td>patrón de precio</td><td class="num neg">sin edge</td></tr>
             <tr><td>momentum</td><td>patrón de precio</td><td class="num neg">sin edge</td></tr>
-            <tr><td>whale-follow</td><td>copiar carteras rentables</td><td class="num pos">✓ edge OOS</td></tr>
+            <tr><td>whale-follow</td><td>copiar carteras rentables</td><td class="num neg">no confirmado</td></tr>
           </tbody>
         </table>
         <div style="height:14px"></div>
         <div class="callout">
-          <strong>whale-follow — validación OOS (sin look-ahead):</strong> las
-          carteras con ventaja en su primera mitad temporal mantienen
-          <span class="pos">+24.6 pts</span> de edge en la segunda, frente a
-          <span class="neg">−7.4 pts</span> del resto (2110 vs 400 trades). El
-          skill <strong>persiste</strong>.
+          <strong>whale-follow — tumbada por la prueba limpia.</strong> Con el
+          universo del <em>leaderboard</em> parecía persistir out-of-sample
+          (<span class="pos">+25 pts</span>), pero ese universo se elige por
+          beneficio de toda la historia (survivorship). Al repetir con un
+          universo <strong>ALEATORIO</strong> de carteras activas el edge cae a
+          <span class="neg">≈0</span>: que una cartera vaya bien en su 1ª mitad
+          <strong>no predice</strong> la 2ª.
           <br><br>
-          <strong>Edge neto:</strong> tras modelar fricciones de copia, con un
-          slippage realista de 5c sigue en <span class="pos">+20.2 pts</span>
-          (77% de copias rentables) y no se anula hasta un slippage de ~27c —
-          muy por encima de la copia real (1-5c). Pendiente: validar fuera del
-          universo del leaderboard antes de operar.
+          Conclusión: copiar "a los que van ganando" <strong>no tiene edge
+          identificable</strong>. La disciplina acaba de evitar copiar el
+          leaderboard con dinero real. HERMES sigue en <strong>paper</strong>.
         </div>
       </div>
     </section>

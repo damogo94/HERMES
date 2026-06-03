@@ -104,12 +104,14 @@ fichero `data_store/STOP` detienen todo.
 > ⚠️ Estrategias de precio (`mean_reversion`, `momentum`): **sin edge** —
 > no superan a comprar-y-mantener tras costes (validación compuesta, spread 2¢).
 >
-> ✅ **whale-follow**: señal **confirmada out-of-sample**. Con split temporal
-> por cartera (selección con la 1ª mitad, medición con la 2ª, sin look-ahead):
-> las carteras buenas-antes mantienen **+24.6 pts** de edge después, frente a
-> **−7.4 pts** de las malas-antes (2110 vs 400 trades). El skill PERSISTE.
+> ⚠️ **whale-follow**: **NO validada**. Con el universo del *leaderboard* parecía
+> persistir out-of-sample (+25 pts; y el edge neto aguantaba fricciones), pero ese
+> universo tiene **survivorship**: se elige por beneficio de toda la historia, que
+> solapa el periodo de test. Al repetir la validación con un universo
+> **ALEATORIO** de carteras activas (`whales-oos --source random`), el edge cae a
+> **≈0** (selección +−0.2 vs control −0.4): el rendimiento pasado de una cartera
+> **no predice** el futuro. Copiar el leaderboard no tiene edge identificable.
 >
-> **Edge neto**: sobrevive a las fricciones de copia — con slippage realista de
-> 5c sigue en **+20.2 pts** (77% de copias rentables) y no se anula hasta ~27c de
-> slippage (la copia real es 1-5c). Pendiente: validar fuera del universo del
-> leaderboard. HERMES sigue en paper hasta entonces.
+> Conclusión: **ninguna estrategia validada todavía**. HERMES sigue en paper. El
+> valor del proyecto es precisamente esta disciplina — cazó dos espejismos
+> (estrategias de precio y survivorship de whales) antes de arriesgar un céntimo.

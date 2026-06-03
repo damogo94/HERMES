@@ -356,14 +356,14 @@ def _cmd_whales_oos(args: argparse.Namespace) -> None:
         print("Faltan dependencias. Instala con: pip install -e .")
         return
 
-    print(f"Walk-forward OOS: universo {args.universe}, {args.trades} trades/cartera, "
-          f"corte en {args.split:.0%}. Resolviendo por lotes… puede tardar.")
+    print(f"Walk-forward OOS [{args.source}]: universo {args.universe}, "
+          f"{args.trades} trades/cartera, corte en {args.split:.0%}. Resolviendo… puede tardar.")
     data, gamma = DataAPIClient(), GammaClient()
     try:
         report = walk_forward(
             data, gamma,
             universe=args.universe, trades_per=args.trades,
-            split=args.split, min_side=args.min_side,
+            split=args.split, min_side=args.min_side, source=args.source,
         )
     finally:
         data.close()
@@ -420,7 +420,7 @@ def _cmd_whales_net(args: argparse.Namespace) -> None:
     try:
         report = walk_forward(
             data, gamma, universe=args.universe, trades_per=args.trades,
-            split=args.split, min_side=args.min_side,
+            split=args.split, min_side=args.min_side, source=args.source,
         )
     finally:
         data.close()
@@ -532,6 +532,8 @@ def main() -> None:
     p_oos.add_argument("-t", "--trades", type=int, default=150, help="Trades por cartera a analizar.")
     p_oos.add_argument("--split", type=float, default=0.5, help="Fracción temporal de selección (resto = test).")
     p_oos.add_argument("--min-side", type=int, default=5, dest="min_side", help="Mín. trades por lado y cartera.")
+    p_oos.add_argument("--source", default="leaderboard", choices=["leaderboard", "random"],
+                       help="Universo: leaderboard (confirma) o random (descubre desde cero).")
 
     p_net = sub.add_parser("whales-net", help="Edge NETO de whale-follow tras fricciones de copia.")
     p_net.add_argument("-u", "--universe", type=int, default=40, help="Nº de carteras candidatas.")
@@ -540,6 +542,8 @@ def main() -> None:
     p_net.add_argument("--min-side", type=int, default=5, dest="min_side", help="Mín. trades por lado.")
     p_net.add_argument("--gas", type=float, default=0.02, help="Coste de gas por trade (USD).")
     p_net.add_argument("--notional", type=float, default=50.0, help="Nocional por trade (USD).")
+    p_net.add_argument("--source", default="leaderboard", choices=["leaderboard", "random"],
+                       help="Universo: leaderboard o random.")
 
     args = parser.parse_args()
 
