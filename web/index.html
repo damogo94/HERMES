@@ -16,25 +16,38 @@
     font: 14px/1.5 -apple-system, Segoe UI, Roboto, sans-serif;
   }
   header {
-    padding: 20px 24px; border-bottom: 1px solid var(--line);
-    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    padding: 20px 24px 0; border-bottom: 1px solid var(--line);
   }
+  .top { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
   h1 { margin: 0; font: 700 22px ui-monospace, Menlo, Consolas, monospace; letter-spacing: 2px; }
   .sub { color: var(--dim); }
   .badge {
     margin-left: auto; padding: 4px 10px; border: 1px solid var(--line);
     border-radius: 6px; color: var(--warn); font-size: 12px; white-space: nowrap;
   }
+  .tabs { display: flex; gap: 4px; margin-top: 16px; }
+  .tab {
+    background: none; border: none; border-bottom: 2px solid transparent;
+    color: var(--dim); padding: 10px 16px; cursor: pointer; font-size: 14px;
+  }
+  .tab:hover { color: var(--txt); }
+  .tab.active { color: var(--txt); border-bottom-color: var(--accent); }
+
   main { padding: 20px 24px; max-width: 1100px; margin: 0 auto; }
+  .view { display: none; }
+  .view.active { display: block; }
+
   section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 22px; }
   .head { padding: 14px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; }
   .head h2 { margin: 0; font-size: 15px; }
   .head .meta { color: var(--dim); font-size: 12px; }
-  button {
+  button.act {
     margin-left: auto; background: #1c2333; color: var(--txt);
     border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer;
   }
-  button:hover { border-color: var(--accent); }
+  button.act:hover { border-color: var(--accent); }
+  .body-pad { padding: 16px 18px; }
+
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 9px 18px; border-bottom: 1px solid var(--line); }
   th { color: var(--dim); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
@@ -43,35 +56,167 @@
   .q { max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pos { color: var(--green); } .neg { color: var(--dim); }
   .loading { padding: 18px; color: var(--dim); }
-  footer { padding: 18px 24px; color: var(--dim); font-size: 12px; border-top: 1px solid var(--line); }
+
+  /* ---- Diagrama de arquitectura ---- */
+  .flow { max-width: 640px; margin: 6px auto 0; }
+  .node {
+    border: 1px solid var(--line); border-left-width: 4px; border-radius: 8px;
+    background: #0f131c; padding: 12px 16px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  }
+  .node .lbl { font-weight: 700; letter-spacing: .5px; }
+  .node .desc { color: var(--dim); font-size: 13px; }
+  .node.read  { border-left-color: var(--green); }
+  .node.think { border-left-color: var(--accent); }
+  .node.risk  { border-left-color: var(--warn); }
+  .node.exec  { border-left-color: var(--red); }
+  .arrow { text-align: center; color: var(--dim); padding: 5px 0; font-size: 16px; }
+  .tag { font-size: 11px; padding: 2px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--dim); }
+  .tag.ok { color: var(--green); border-color: #1e5e3a; }
+  .tag.stop { color: var(--red); border-color: #6e2620; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+  .body-pad p { margin: 0 0 12px; }
+  .body-pad p:last-child { margin-bottom: 0; }
+  .phase { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .phase:last-child { border-bottom: none; }
+  .phase .st { width: 20px; text-align: center; }
+  .done { color: var(--green); } .todo { color: var(--dim); }
   code { color: var(--accent); }
+  .callout {
+    border: 1px dashed var(--line); border-radius: 8px; padding: 12px 16px;
+    color: var(--dim); font-size: 13px; background: #0f131c;
+  }
+  footer { padding: 18px 24px; color: var(--dim); font-size: 12px; border-top: 1px solid var(--line); }
 </style>
 </head>
 <body>
 <header>
-  <h1>HERMES</h1>
-  <span class="sub">panel de inteligencia · datos en vivo de Polymarket</span>
-  <span class="badge">SOLO LECTURA · no ejecuta órdenes</span>
+  <div class="top">
+    <h1>HERMES</h1>
+    <span class="sub">herramienta de trading para mercados de predicción</span>
+    <span class="badge">SOLO LECTURA · no ejecuta órdenes</span>
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-view="panel">Panel</button>
+    <button class="tab" data-view="sistema">Sistema</button>
+  </div>
 </header>
 
 <main>
-  <section>
-    <div class="head">
-      <h2>Mercados activos</h2>
-      <span class="meta" id="mk-meta">cargando…</span>
-      <button id="mk-refresh">Refrescar</button>
-    </div>
-    <div id="mk-body" class="loading">Cargando mercados…</div>
-  </section>
+  <!-- ================= PANEL ================= -->
+  <div class="view active" id="view-panel">
+    <section>
+      <div class="head">
+        <h2>Mercados activos</h2>
+        <span class="meta" id="mk-meta">cargando…</span>
+        <button class="act" id="mk-refresh">Refrescar</button>
+      </div>
+      <div id="mk-body" class="loading">Cargando mercados…</div>
+    </section>
 
-  <section>
-    <div class="head">
-      <h2>Escáner de arbitraje YES/NO</h2>
-      <span class="meta" id="arb-meta">—</span>
-      <button id="arb-run">Escanear</button>
-    </div>
-    <div id="arb-body" class="loading">Pulsa «Escanear» para buscar pares cuyo coste YES+NO &lt; $1.</div>
-  </section>
+    <section>
+      <div class="head">
+        <h2>Escáner de arbitraje YES/NO</h2>
+        <span class="meta" id="arb-meta">—</span>
+        <button class="act" id="arb-run">Escanear</button>
+      </div>
+      <div id="arb-body" class="loading">Pulsa «Escanear» para buscar pares cuyo coste YES+NO &lt; $1.</div>
+    </section>
+  </div>
+
+  <!-- ================= SISTEMA ================= -->
+  <div class="view" id="view-sistema">
+    <section>
+      <div class="head"><h2>¿Qué es HERMES?</h2></div>
+      <div class="body-pad">
+        <p>HERMES es una herramienta que busca <strong>oportunidades de trading en
+        mercados de predicción</strong> (Polymarket; Kalshi después) y, lo más
+        importante, mide si realmente tienen ventaja <em>antes</em> de arriesgar
+        dinero. Está diseñada para ser autónoma, pero por capas y con candados:
+        de fábrica <strong>no puede enviar ni una orden real</strong>.</p>
+        <p>Dos piezas: un <strong>paquete Python</strong> (toda la lógica, vía
+        <code>hermes</code> en la terminal) y <strong>este panel</strong> estático,
+        que lee datos públicos de Polymarket en vivo.</p>
+      </div>
+    </section>
+
+    <section>
+      <div class="head"><h2>Arquitectura — el flujo de una decisión</h2></div>
+      <div class="body-pad">
+        <div class="flow">
+          <div class="node read">
+            <span class="lbl">1 · DATOS</span>
+            <span class="desc">Gamma · CLOB · Archive</span>
+            <span class="tag ok">solo lectura</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="node think">
+            <span class="lbl">2 · INTELIGENCIA</span>
+            <span class="desc">escáner de arbitraje · señales</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="node think">
+            <span class="lbl">3 · ESTRATEGIA</span>
+            <span class="desc">reglas + LLM (solo señal) → intención de orden</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="node risk">
+            <span class="lbl">4 · RIESGO</span>
+            <span class="desc">topes por trade/hora/total · kill-switch</span>
+            <span class="tag">la puerta</span>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="node exec">
+            <span class="lbl">5 · EJECUCIÓN</span>
+            <span class="desc">DRY-RUN: simula y registra</span>
+            <span class="tag stop">envío real BLOQUEADO</span>
+          </div>
+        </div>
+        <div style="height:18px"></div>
+        <div class="callout">
+          <strong>Validación a un lado:</strong> el motor de <em>backtest</em> mide
+          cada estrategia sobre histórico (train/test, costes reales, baseline
+          buy&amp;hold). Una estrategia <strong>no llega a producción hasta superar
+          esa validación</strong>. Hoy ninguna lo ha conseguido todavía.
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="head"><h2>Cómo funciona y por qué es seguro</h2></div>
+      <div class="body-pad grid2">
+        <div>
+          <p><strong>El ciclo.</strong> HERMES lee el mercado (1), detecta
+          oportunidades (2), una estrategia decide qué haría (3), el gestor de
+          riesgo lo aprueba o lo bloquea (4) y la ejecución lo procesa (5).</p>
+          <p><strong>Interruptor maestro.</strong> <code>DRY_RUN=true</code> por
+          defecto: todo se <em>simula</em> y se anota en un diario, pero nunca se
+          transmite.</p>
+        </div>
+        <div>
+          <p><strong>Garantía.</strong> Aunque desactives el DRY-RUN, la ruta de
+          envío real no está implementada (Fase 5): devuelve <code>blocked</code>.
+          Es imposible perder dinero en el estado actual.</p>
+          <p><strong>Frenos.</strong> Topes de gasto por operación, por hora y
+          totales, más un <em>kill-switch</em> que detiene todo al instante.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="head"><h2>Hoja de ruta</h2></div>
+      <div class="body-pad">
+        <div class="phase"><span class="st done">✓</span><span><strong>0</strong> · Esqueleto y configuración</span></div>
+        <div class="phase"><span class="st done">✓</span><span><strong>1</strong> · Datos en vivo (solo lectura)</span></div>
+        <div class="phase"><span class="st done">✓</span><span><strong>2</strong> · Inteligencia (detección de arbitraje)</span></div>
+        <div class="phase"><span class="st done">✓</span><span><strong>3</strong> · Backtest + validación seria</span></div>
+        <div class="phase"><span class="st done">✓</span><span><strong>4</strong> · Riesgo + ejecución DRY-RUN</span></div>
+        <div class="phase"><span class="st todo">○</span><span class="todo"><strong>5</strong> · Ejecución real (wallet) — bloqueada por diseño</span></div>
+        <div class="phase"><span class="st todo">○</span><span class="todo"><strong>6</strong> · Autonomía progresiva</span></div>
+      </div>
+    </section>
+  </div>
 </main>
 
 <footer>
@@ -93,8 +238,21 @@ const fmtUsd = (n) => n == null ? "—" : "$" + Math.round(n).toLocaleString("en
 const pct = (n) => (n * 100).toFixed(1) + "%";
 
 let MARKETS = [];
+let loadedPanel = false;
+
+/* ---- Pestañas ---- */
+document.querySelectorAll(".tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+    document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
+    tab.classList.add("active");
+    document.getElementById("view-" + tab.dataset.view).classList.add("active");
+    if (tab.dataset.view === "panel" && !loadedPanel) loadMarkets();
+  });
+});
 
 async function loadMarkets() {
+  loadedPanel = true;
   const body = document.getElementById("mk-body");
   body.className = "loading"; body.textContent = "Cargando mercados…";
   try {
