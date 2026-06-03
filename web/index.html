@@ -147,13 +147,13 @@
         <div class="flow">
           <div class="node read">
             <span class="lbl">1 · DATOS</span>
-            <span class="desc">Gamma · CLOB · Archive</span>
+            <span class="desc">Gamma · CLOB · Data API · Archive</span>
             <span class="tag ok">solo lectura</span>
           </div>
           <div class="arrow">↓</div>
           <div class="node think">
             <span class="lbl">2 · INTELIGENCIA</span>
-            <span class="desc">escáner de arbitraje · señales</span>
+            <span class="desc">arbitraje · whale-follow · señales</span>
           </div>
           <div class="arrow">↓</div>
           <div class="node think">
@@ -176,9 +176,10 @@
         <div style="height:18px"></div>
         <div class="callout">
           <strong>Validación a un lado:</strong> el motor de <em>backtest</em> mide
-          cada estrategia sobre histórico (train/test, costes reales, baseline
-          buy&amp;hold). Una estrategia <strong>no llega a producción hasta superar
-          esa validación</strong>. Hoy ninguna lo ha conseguido todavía.
+          cada estrategia sobre histórico (train/test, costes reales, baseline).
+          Una estrategia <strong>no llega a producción hasta superar esa
+          validación</strong>. whale-follow ya la supera out-of-sample; las de
+          precio (mean-reversion, momentum), no.
         </div>
       </div>
     </section>
@@ -200,6 +201,32 @@
           Es imposible perder dinero en el estado actual.</p>
           <p><strong>Frenos.</strong> Topes de gasto por operación, por hora y
           totales, más un <em>kill-switch</em> que detiene todo al instante.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="head"><h2>Estrategias — qué funciona y qué no</h2></div>
+      <div class="body-pad">
+        <p>HERMES valida cada estrategia <strong>out-of-sample</strong> y con costes
+        reales antes de confiar en ella. Resultado hasta ahora:</p>
+        <table>
+          <thead><tr><th>Estrategia</th><th>Tesis</th><th class="num">Veredicto</th></tr></thead>
+          <tbody>
+            <tr><td>mean reversion</td><td>patrón de precio</td><td class="num neg">sin edge</td></tr>
+            <tr><td>momentum</td><td>patrón de precio</td><td class="num neg">sin edge</td></tr>
+            <tr><td>whale-follow</td><td>copiar carteras rentables</td><td class="num pos">✓ edge OOS</td></tr>
+          </tbody>
+        </table>
+        <div style="height:14px"></div>
+        <div class="callout">
+          <strong>whale-follow — validación OOS (sin look-ahead):</strong> las
+          carteras con ventaja en su primera mitad temporal mantienen
+          <span class="pos">+24.6 pts</span> de edge en la segunda, frente a
+          <span class="neg">−7.4 pts</span> del resto (2110 vs 400 trades). El
+          skill <strong>persiste</strong>. Pendiente antes de operar: estimar el
+          edge <strong>neto</strong> tras fricciones de copia (latencia, peor
+          fill, spread, gas).
         </div>
       </div>
     </section>
