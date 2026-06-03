@@ -57,16 +57,23 @@ hermes markets                # lista mercados activos de Polymarket
 hermes markets -q bitcoin -n 5  # busca por texto
 hermes scan                   # detecta arbitraje YES/NO en mercados activos
 hermes scan -n 60 -e 0.005    # escanea 60 mercados, edge mín 0.5%
+hermes backtest -q bitcoin    # backtest mark-to-market de una estrategia
 ```
 
 Todo es solo lectura; nada de esto necesita wallet.
 
 ## Estado
 
-**Fase 2** — inteligencia (solo lectura + cálculo):
+**Fase 3** — backtesting (solo lectura + simulación):
 - Capa de datos: `GammaClient`, `ClobReadClient`, `ArchiveClient`.
-- Detección: `ArbitrageDetector` (arbitraje binario YES/NO: `ask_yes + ask_no < $1`)
-  y `Scanner` que lo aplica a los mercados activos (`hermes scan`).
+- Inteligencia: `ArbitrageDetector` + `Scanner` (`hermes scan`).
+- Backtest: `Backtester` (motor mark-to-market), `MeanReversion`, métricas
+  (`summarize`) y `hermes backtest`.
 
-Aún sin estrategia, riesgo ni ejecución. Próximo: más detectores (mispricing,
-whale-follow) y backtesting.
+> ⚠️ El histórico de precios solo está disponible para mercados **abiertos**, así
+> que el backtest es mark-to-market (no hold-to-resolution). Los resultados de un
+> solo mercado, sin fees ni out-of-sample, **NO** demuestran edge — son para
+> validar el motor. La validación seria (multi-mercado, train/test, costes) es lo
+> siguiente.
+
+Aún sin riesgo ni ejecución.

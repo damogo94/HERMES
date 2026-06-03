@@ -107,6 +107,57 @@ def _cmd_scan(args: argparse.Namespace) -> None:
     print(" El edge teórico aún debe cubrir gas y posible slippage.")
 
 
+def _cmd_backtest(args: argparse.Namespace) -> None:
+    try:
+        from hermes.backtest.data import load_series, pick_market
+        from hermes.backtest.engine import Backtester
+        from hermes.backtest.metrics import summarize
+        from hermes.backtest.strategies import MeanReversion
+        from hermes.data.clob import ClobReadClient
+        from hermes.data.gamma import GammaClient
+    except ImportError:
+        print("Faltan dependencias. Instala con: pip install -e .")
+        return
+
+    gamma, clob = GammaClient(), ClobReadClient()
+    try:
+        market = pick_market(gamma, query=args.query)
+        if market is None or not market.token_yes:
+            print("No se encontró un mercado activo adecuado.")
+            return
+        series = load_series(clob, market.token_yes, interval=args.interval)
+    finally:
+        gamma.close()
+        clob.close()
+
+    print(_LINE)
+    print(f" Backtest: {market.question[:52]}")
+    print(_LINE)
+    if len(series) < args.window + 2:
+        print(f" Serie insuficiente ({len(series)} puntos). Prueba otro mercado/intervalo.")
+        return
+
+    strat = MeanReversion(
+        window=args.window,
+        band=args.band,
+        take_profit=args.take_profit,
+        stop_loss=args.stop_loss,
+    )
+    bt = Backtester(fee_bps=args.fee_bps, slippage=args.slippage, size=1.0)
+    result = bt.run(series, strat)
+    summary = summarize(result)
+
+    print(f" estrategia ....... mean_reversion(window={args.window}, band={args.band})")
+    print(f" datos ............ {len(series)} puntos, intervalo={args.interval}")
+    print(f" precio ........... primero={series[0][1]:.3f}  último={series[-1][1]:.3f}")
+    print(_LINE)
+    for line in summary.as_lines():
+        print(" " + line)
+    print(_LINE)
+    print(" Backtest mark-to-market sobre histórico de un mercado activo.")
+    print(" Es simulación: no prueba edge garantizado ni se ha operado nada.")
+
+
 def main() -> None:
     # Salida UTF-8 en consolas Windows (evita mojibake con acentos y «—»).
     try:
@@ -136,12 +187,24 @@ def main() -> None:
         help="Edge mínimo (fracción, p. ej. 0.01 = 1%%).",
     )
 
+    p_bt = sub.add_parser("backtest", help="Backtest mark-to-market de una estrategia.")
+    p_bt.add_argument("-q", "--query", default=None, help="Mercado a usar (texto). Si no, el primero activo.")
+    p_bt.add_argument("--interval", default="1m", help="Ventana histórica (max,1m,1w,1d,6h,1h).")
+    p_bt.add_argument("--window", type=int, default=24, help="Ventana SMA (nº de puntos).")
+    p_bt.add_argument("--band", type=float, default=0.05, help="Banda de entrada (fracción bajo la SMA).")
+    p_bt.add_argument("--take-profit", type=float, default=None, dest="take_profit", help="Take-profit (fracción).")
+    p_bt.add_argument("--stop-loss", type=float, default=None, dest="stop_loss", help="Stop-loss (fracción).")
+    p_bt.add_argument("--fee-bps", type=float, default=0.0, dest="fee_bps", help="Comisión por op (bps).")
+    p_bt.add_argument("--slippage", type=float, default=0.0, help="Slippage por fill (fracción).")
+
     args = parser.parse_args()
 
     if args.command == "markets":
         _cmd_markets(args)
     elif args.command == "scan":
         _cmd_scan(args)
+    elif args.command == "backtest":
+        _cmd_backtest(args)
     else:  # status (por defecto)
         _cmd_status(args)
 
