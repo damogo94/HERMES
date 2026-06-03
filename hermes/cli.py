@@ -158,6 +158,37 @@ def _cmd_backtest(args: argparse.Namespace) -> None:
     print(" Es simulación: no prueba edge garantizado ni se ha operado nada.")
 
 
+def _cmd_validate(args: argparse.Namespace) -> None:
+    try:
+        from hermes.backtest.validation import validate
+    except ImportError:
+        print("Faltan dependencias. Instala con: pip install -e .")
+        return
+
+    print(f"Validando mean_reversion sobre ~{args.markets} mercados "
+          f"(train/test {args.split:.0%}, fee={args.fee_bps}bps, slippage={args.slippage})...")
+    print("Puede tardar (una petición de histórico por mercado).")
+    report = validate(
+        strategy_params={"window": args.window, "band": args.band},
+        n_markets=args.markets,
+        interval=args.interval,
+        fee_bps=args.fee_bps,
+        slippage=args.slippage,
+        split=args.split,
+    )
+    print(_LINE)
+    print(" VALIDACIÓN out-of-sample")
+    print(_LINE)
+    for line in report.as_lines():
+        print(" " + line)
+    print(_LINE)
+    print(" VEREDICTO: " + report.verdict())
+    print(_LINE)
+    print(" Nota: los retornos son SUMA de % por trade y SOBREESTIMAN mucho en")
+    print(" tokens baratos/volátiles; el slippage fraccional infravalora el spread")
+    print(" real (en céntimos). Fíate del VEREDICTO y de train≈test, no de la magnitud.")
+
+
 def main() -> None:
     # Salida UTF-8 en consolas Windows (evita mojibake con acentos y «—»).
     try:
@@ -197,6 +228,15 @@ def main() -> None:
     p_bt.add_argument("--fee-bps", type=float, default=0.0, dest="fee_bps", help="Comisión por op (bps).")
     p_bt.add_argument("--slippage", type=float, default=0.0, help="Slippage por fill (fracción).")
 
+    p_val = sub.add_parser("validate", help="Validación seria: multi-mercado, costes, train/test, baseline.")
+    p_val.add_argument("-m", "--markets", type=int, default=25, help="Nº de mercados a validar.")
+    p_val.add_argument("--interval", default="1m", help="Ventana histórica (max,1m,1w,1d,6h,1h).")
+    p_val.add_argument("--window", type=int, default=24, help="Ventana SMA.")
+    p_val.add_argument("--band", type=float, default=0.05, help="Banda de entrada.")
+    p_val.add_argument("--fee-bps", type=float, default=0.0, dest="fee_bps", help="Comisión por op (bps).")
+    p_val.add_argument("--slippage", type=float, default=0.01, help="Slippage por fill (fracción).")
+    p_val.add_argument("--split", type=float, default=0.5, help="Proporción train (resto = test).")
+
     args = parser.parse_args()
 
     if args.command == "markets":
@@ -205,6 +245,8 @@ def main() -> None:
         _cmd_scan(args)
     elif args.command == "backtest":
         _cmd_backtest(args)
+    elif args.command == "validate":
+        _cmd_validate(args)
     else:  # status (por defecto)
         _cmd_status(args)
 

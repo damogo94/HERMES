@@ -17,6 +17,13 @@ from hermes.backtest.data import load_series, pick_market
 from hermes.backtest.engine import Backtester, BacktestResult, ClosedTrade
 from hermes.backtest.metrics import Summary, summarize
 from hermes.backtest.strategies import MeanReversion, Strategy
+from hermes.backtest.validation import (
+    MarketEval,
+    ValidationReport,
+    buy_and_hold_return,
+    split_series,
+    validate,
+)
 
 __all__ = [
     "Backtester",
@@ -28,4 +35,9 @@ __all__ = [
     "Summary",
     "load_series",
     "pick_market",
+    "validate",
+    "ValidationReport",
+    "MarketEval",
+    "split_series",
+    "buy_and_hold_return",
 ]
