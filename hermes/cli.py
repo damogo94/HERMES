@@ -8,6 +8,7 @@ Comandos:
 from __future__ import annotations
 
 import argparse
+import sys
 
 from hermes import __version__
 from hermes.core.config import get_settings
@@ -72,6 +73,12 @@ def _cmd_markets(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    # Salida UTF-8 en consolas Windows (evita mojibake con acentos y «—»).
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
     settings = get_settings()
     setup_logging(settings.log_level)
 
