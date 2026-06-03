@@ -76,6 +76,7 @@ hermes paper -q bitcoin --size 10  # pasa una orden por riesgo+ejecución (DRY-R
 hermes journal                # historial de órdenes simuladas
 hermes whales                 # top carteras por beneficio (leaderboard)
 hermes validate-whales        # valida la tesis whale-follow (edge vs baseline)
+hermes whales-oos             # validación OOS: split temporal sin look-ahead
 ```
 
 Todo es solo lectura/simulación; nada de esto necesita wallet ni envía órdenes.
@@ -102,8 +103,11 @@ fichero `data_store/STOP` detienen todo.
 > ⚠️ Estrategias de precio (`mean_reversion`, `momentum`): **sin edge** —
 > no superan a comprar-y-mantener tras costes (validación compuesta, spread 2¢).
 >
-> ✅ **whale-follow**: primera señal **positiva** — las top carteras aciertan el
-> 90% entrando a precio medio 0.58 (edge +32 pts) frente a +3.8 pts de traders
-> aleatorios. Promete, pero la selección es por beneficio pasado (no OOS puro):
-> falta confirmarlo con un **split temporal** (elegir whales con datos antiguos y
-> medir solo sus trades posteriores) antes de confiar. HERMES sigue en paper.
+> ✅ **whale-follow**: señal **confirmada out-of-sample**. Con split temporal
+> por cartera (selección con la 1ª mitad, medición con la 2ª, sin look-ahead):
+> las carteras buenas-antes mantienen **+24.6 pts** de edge después, frente a
+> **−7.4 pts** de las malas-antes (2110 vs 400 trades). El skill PERSISTE.
+>
+> Pendiente antes de arriesgar dinero: estimar el **edge NETO** tras fricciones
+> de copia (latencia, peor fill, spread, gas) — el +24.6 teórico se captura solo
+> en parte. HERMES sigue en paper.

@@ -15,8 +15,10 @@ from hermes.intelligence.arbitrage import ArbitrageDetector
 from hermes.intelligence.models import Opportunity
 from hermes.intelligence.scanner import Scanner
 from hermes.intelligence.whales import (
+    oos_verdict,
     top_whales,
     verdict,
+    walk_forward,
     whale_follow_report,
 )
 
@@ -27,4 +29,6 @@ __all__ = [
     "top_whales",
     "whale_follow_report",
     "verdict",
+    "walk_forward",
+    "oos_verdict",
 ]

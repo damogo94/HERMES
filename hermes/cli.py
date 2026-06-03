@@ -347,6 +347,60 @@ def _cmd_validate_whales(args: argparse.Namespace) -> None:
     print(" Caveat: selección por beneficio pasado; no es OOS puro.")
 
 
+def _cmd_whales_oos(args: argparse.Namespace) -> None:
+    try:
+        from hermes.data.data_api import DataAPIClient
+        from hermes.data.gamma import GammaClient
+        from hermes.intelligence.whales import oos_verdict, walk_forward
+    except ImportError:
+        print("Faltan dependencias. Instala con: pip install -e .")
+        return
+
+    print(f"Walk-forward OOS: universo {args.universe}, {args.trades} trades/cartera, "
+          f"corte en {args.split:.0%}. Resolviendo por lotes… puede tardar.")
+    data, gamma = DataAPIClient(), GammaClient()
+    try:
+        report = walk_forward(
+            data, gamma,
+            universe=args.universe, trades_per=args.trades,
+            split=args.split, min_side=args.min_side,
+        )
+    finally:
+        data.close()
+        gamma.close()
+
+    print(_LINE)
+    print(" WHALE-FOLLOW — validación OOS (split temporal, sin look-ahead)")
+    print(_LINE)
+    if "error" in report:
+        print(" " + report["error"])
+        print(_LINE)
+        print(" VEREDICTO: " + oos_verdict(report))
+        return
+
+    def fmt(ev, titulo):
+        print(f" {titulo}")
+        if not ev:
+            print("   (sin trades post-corte suficientes)")
+            return
+        print(f"   trades post-corte  {ev['n']}")
+        print(f"   win rate ......... {ev['win_rate'] * 100:.1f}%")
+        print(f"   precio medio ..... {ev['avg_entry']:.3f}")
+        print(f"   EDGE ............. {ev['edge'] * 100:+.2f} pts")
+
+    print(f" carteras cualificadas .. {report['qualified']}")
+    print(f" seleccionadas (edge>0 pre-corte) .. {report['n_selected']}")
+    print()
+    fmt(report["sel"], "SELECCIONADAS — rendimiento DESPUÉS del corte:")
+    print()
+    fmt(report["non"], "NO seleccionadas — después del corte:")
+    print(_LINE)
+    print(" VEREDICTO: " + oos_verdict(report))
+    print(_LINE)
+    print(" Selección con datos pre-corte; medición solo post-corte. Si las")
+    print(" 'buenas antes' siguen ganando, es skill copiable; si no, era suerte.")
+
+
 def main() -> None:
     # Salida UTF-8 en consolas Windows (evita mojibake con acentos y «—»).
     try:
@@ -418,6 +472,12 @@ def main() -> None:
     p_vw.add_argument("--window", default="all", help="Ventana del leaderboard.")
     p_vw.add_argument("--baseline", type=int, default=12, help="Nº de carteras aleatorias para el baseline.")
 
+    p_oos = sub.add_parser("whales-oos", help="Whale-follow OOS: split temporal sin look-ahead.")
+    p_oos.add_argument("-u", "--universe", type=int, default=40, help="Nº de carteras candidatas.")
+    p_oos.add_argument("-t", "--trades", type=int, default=150, help="Trades por cartera a analizar.")
+    p_oos.add_argument("--split", type=float, default=0.5, help="Fracción temporal de selección (resto = test).")
+    p_oos.add_argument("--min-side", type=int, default=5, dest="min_side", help="Mín. trades por lado y cartera.")
+
     args = parser.parse_args()
 
     if args.command == "markets":
@@ -436,6 +496,8 @@ def main() -> None:
         _cmd_whales(args)
     elif args.command == "validate-whales":
         _cmd_validate_whales(args)
+    elif args.command == "whales-oos":
+        _cmd_whales_oos(args)
     else:  # status (por defecto)
         _cmd_status(args)
 

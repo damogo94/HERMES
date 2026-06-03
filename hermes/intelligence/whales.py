@@ -6,20 +6,21 @@ las probabilidades IMPLÍCITAS del mercado (el precio al que entran)?
 
 Métrica honesta y robusta:
     edge = win_rate − precio_medio_de_entrada
-Si compran a 0.50 de media y aciertan el 60%, tienen skill predictivo (edge>0).
-Si aciertan ~50% (= su precio medio), solo asumen riesgo, no skill.
+Si compran a 0.50 de media y aciertan el 60%, tienen skill (edge>0). Si aciertan
+~50% (= su precio medio), solo asumen riesgo.
 
 P&L sin price-history: cada trade trae su precio de entrada; el resultado (ganó
-o no su lado) sale de la RESOLUCIÓN del mercado (Gamma, mercados cerrados). Así
-medimos hold-to-resolution sin necesitar series históricas de precio.
+o no su lado) sale de la RESOLUCIÓN del mercado (Gamma, mercados cerrados).
 
-Control de sesgo: comparamos contra un baseline de traders ALEATORIOS (trades
-globales recientes) medido igual. Si las whales no superan al baseline, el
-"sigue a los ganadores" no aporta.
+Dos validaciones:
+  1. whale_follow_report — edge de las top carteras vs baseline de carteras
+     aleatorias. Rápido, pero la selección por beneficio pasado tiene sesgo.
+  2. walk_forward (OOS) — selecciona carteras por su edge ANTES de un corte
+     temporal T y mide SOLO sus trades POSTERIORES a T. Esto elimina el
+     look-ahead: comprueba si la habilidad PERSISTE (skill) o se desvanece (suerte).
 
-CAVEAT: las whales se seleccionan por beneficio pasado, que solapa con estas
-mismas resoluciones. No es un test puramente out-of-sample; es un primer read
-robusto (edge vs odds implícitas y vs baseline), no una garantía de futuro.
+La resolución de mercados se hace por LOTES (Gamma acepta varios clob_token_ids
+en una llamada con el parámetro repetido), para que sea viable.
 """
 
 from __future__ import annotations
@@ -48,85 +49,85 @@ def top_whales(data: DataAPIClient, window: str = "all", limit: int = 15) -> lis
     return out
 
 
-def _resolved_payoff(gamma: GammaClient, token_id: str, cache: dict) -> float | None:
-    """1.0 si ese token (lado) ganó, 0.0 si perdió, None si no resuelto/desconocido."""
-    if token_id in cache:
-        return cache[token_id]
-    payoff: float | None = None
-    try:
-        data = get_json(
-            gamma.session,
-            f"{gamma.base_url}/markets",
-            params={"clob_token_ids": token_id, "closed": "true", "limit": 1},
-        )
-        rows = data if isinstance(data, list) else data.get("data", [])
-        if rows:
-            m: Market = Market.from_gamma(rows[0])
-            p = m.outcome_prices
-            if len(p) >= 2 and max(p) >= 0.99 and min(p) <= 0.01:
-                win_index = 0 if p[0] > p[1] else 1
-                tok = str(token_id)
-                tok_index = 0 if m.token_yes == tok else (1 if m.token_no == tok else None)
-                if tok_index is not None:
-                    payoff = 1.0 if tok_index == win_index else 0.0
-    except Exception as e:  # noqa: BLE001
-        logger.debug("resolución falló token %s: %s", token_id, e)
-    cache[token_id] = payoff
-    return payoff
+# --------------------------------------------------------------------------- #
+# Resolución de mercados (por lotes) → payoff por token
+# --------------------------------------------------------------------------- #
+def _payoff_for_token(m: Market, token: str) -> float | None:
+    p = m.outcome_prices
+    if len(p) >= 2 and max(p) >= 0.99 and min(p) <= 0.01:
+        win_index = 0 if p[0] > p[1] else 1
+        tok = str(token)
+        idx = 0 if m.token_yes == tok else (1 if m.token_no == tok else None)
+        if idx is not None:
+            return 1.0 if idx == win_index else 0.0
+    return None
 
 
-def evaluate_trades(
-    trades: list[dict],
-    gamma: GammaClient,
-    cache: dict,
-    max_lookups: int = 200,
-) -> dict | None:
-    """Evalúa una lista de trades sobre mercados ya resueltos. Devuelve métricas."""
-    n = wins = 0
-    sum_entry = sum_roi = 0.0
-    lookups = 0
+def resolve_tokens(gamma: GammaClient, tokens, cache: dict, batch_size: int = 20) -> None:
+    """Rellena `cache[token] = 1.0/0.0/None` para los tokens dados (por lotes).
+
+    1.0 = ese token ganó, 0.0 = perdió, None = mercado no resuelto/desconocido.
+    """
+    need = [t for t in dict.fromkeys(tokens) if t and t not in cache]
+    for i in range(0, len(need), batch_size):
+        batch = need[i:i + batch_size]
+        rows = []
+        try:
+            params = [("clob_token_ids", t) for t in batch]
+            params += [("closed", "true"), ("limit", str(len(batch) * 2))]
+            data = get_json(gamma.session, f"{gamma.base_url}/markets", params=params)
+            rows = data if isinstance(data, list) else data.get("data", [])
+        except Exception as e:  # noqa: BLE001
+            logger.debug("batch resolución falló: %s", e)
+        for row in rows:
+            m = Market.from_gamma(row)
+            for tok in (m.token_yes, m.token_no):
+                if tok:
+                    cache[tok] = _payoff_for_token(m, tok)
+        for t in batch:           # los no devueltos = no resueltos
+            cache.setdefault(t, None)
+
+
+def _edge(records: list[tuple]) -> dict | None:
+    """records: lista de (ts, price, payoff). Devuelve métricas o None."""
+    if not records:
+        return None
+    n = len(records)
+    wins = sum(1 for _, _, p in records if p > 0)
+    avg_entry = sum(pr for _, pr, _ in records) / n
+    win_rate = wins / n
+    roi = sum((p - pr) / pr for _, pr, p in records) / n
+    return {"n": n, "win_rate": win_rate, "avg_entry": avg_entry,
+            "edge": win_rate - avg_entry, "mean_roi": roi}
+
+
+def _records(trades: list[dict], cache: dict) -> list[tuple]:
+    """Convierte trades crudos en (ts, price, payoff) para los ya resueltos."""
+    recs: list[tuple] = []
     for t in trades:
         token = str(t.get("asset", ""))
-        raw_price = t.get("price")
-        if not token or raw_price in (None, ""):
-            continue
-        try:
-            price = float(raw_price)
-        except (TypeError, ValueError):
-            continue
-        if not (0.0 < price < 1.0):
-            continue
-        if token not in cache:
-            if lookups >= max_lookups:
-                continue
-            lookups += 1
-        payoff = _resolved_payoff(gamma, token, cache)
+        payoff = cache.get(token)
         if payoff is None:
             continue
-        n += 1
-        wins += 1 if payoff > 0 else 0
-        sum_entry += price
-        sum_roi += (payoff - price) / price
-    if n == 0:
-        return None
-    win_rate = wins / n
-    avg_entry = sum_entry / n
-    return {
-        "n": n,
-        "win_rate": win_rate,
-        "avg_entry": avg_entry,
-        "edge": win_rate - avg_entry,
-        "mean_roi": sum_roi / n,
-    }
+        try:
+            price = float(t.get("price"))
+            ts = int(t.get("timestamp"))
+        except (TypeError, ValueError):
+            continue
+        if 0.0 < price < 1.0:
+            recs.append((ts, price, payoff))
+    return recs
 
 
+def evaluate_trades(trades: list[dict], gamma: GammaClient, cache: dict) -> dict | None:
+    resolve_tokens(gamma, [str(t.get("asset", "")) for t in trades], cache)
+    return _edge(_records(trades, cache))
+
+
+# --------------------------------------------------------------------------- #
+# Validación 1: top carteras vs baseline aleatorio (rápida, con sesgo)
+# --------------------------------------------------------------------------- #
 def _random_wallets(data: DataAPIClient, exclude: set, count: int) -> list[str]:
-    """Cosecha carteras 'normales' de los trades globales recientes.
-
-    Nota: NO usamos los trades recientes directamente porque son de hace segundos
-    y sus mercados aún no han resuelto. En cambio sacamos las carteras y luego
-    pedimos SU historial (que sí abarca mercados ya resueltos).
-    """
     wallets: list[str] = []
     seen: set = set()
     for t in data.recent_trades(limit=300):
@@ -146,13 +147,7 @@ def whale_follow_report(
     trades_per: int = 15,
     window: str = "all",
     baseline_wallets: int = 12,
-    max_lookups: int = 250,
 ) -> dict:
-    """Compara el edge de copiar whales vs un baseline de carteras aleatorias.
-
-    Ambos lados se miden igual: historial de trades de cada cartera, sobre
-    mercados YA RESUELTOS, edge = win_rate − precio_medio_de_entrada.
-    """
     cache: dict = {}
     whales = top_whales(data, window=window, limit=n_whales)
 
@@ -164,8 +159,7 @@ def whale_follow_report(
             whale_trades.extend(data.user_trades(w["wallet"], limit=trades_per))
         except Exception as e:  # noqa: BLE001
             logger.debug("trades de %s fallaron: %s", w["wallet"], e)
-
-    whale_eval = evaluate_trades(whale_trades, gamma, cache, max_lookups)
+    whale_eval = evaluate_trades(whale_trades, gamma, cache)
 
     base_trades: list[dict] = []
     for wallet in _random_wallets(data, exclude=whale_set, count=baseline_wallets):
@@ -173,25 +167,110 @@ def whale_follow_report(
             base_trades.extend(data.user_trades(wallet, limit=trades_per))
         except Exception as e:  # noqa: BLE001
             logger.debug("trades baseline de %s fallaron: %s", wallet, e)
-    base_eval = evaluate_trades(base_trades, gamma, cache, max_lookups)
+    base_eval = evaluate_trades(base_trades, gamma, cache)
 
-    return {
-        "window": window,
-        "whales": whales,
-        "whale_eval": whale_eval,
-        "base_eval": base_eval,
-    }
+    return {"window": window, "whales": whales,
+            "whale_eval": whale_eval, "base_eval": base_eval}
 
 
 def verdict(report: dict) -> str:
-    we = report.get("whale_eval")
-    be = report.get("base_eval")
+    we, be = report.get("whale_eval"), report.get("base_eval")
     if not we:
-        return "SIN DATOS: no se hallaron suficientes trades de whales en mercados resueltos."
+        return "SIN DATOS: no se hallaron suficientes trades de whales resueltos."
     edge_w = we["edge"]
     edge_b = be["edge"] if be else 0.0
     if edge_w <= 0:
-        return "SIN EDGE: las whales no baten las probabilidades implícitas del mercado."
+        return "SIN EDGE: las whales no baten las probabilidades implícitas."
     if be and edge_w > edge_b:
-        return "SEÑAL POSITIVA: las whales baten al mercado y al baseline de traders típicos."
-    return "Edge positivo pero NO superior al baseline. Débil; podría ser ruido/sesgo."
+        return "SEÑAL POSITIVA: las whales baten al mercado y al baseline."
+    return "Edge positivo pero NO superior al baseline. Débil; posible sesgo."
+
+
+# --------------------------------------------------------------------------- #
+# Validación 2: walk-forward OOS (la prueba honesta de persistencia)
+# --------------------------------------------------------------------------- #
+def walk_forward(
+    data: DataAPIClient,
+    gamma: GammaClient,
+    universe: int = 40,
+    trades_per: int = 150,
+    split: float = 0.5,
+    min_side: int = 5,
+    window: str = "all",
+) -> dict:
+    """Selecciona carteras por su edge ANTES del corte T; mide solo POST-T.
+
+    Compara las 'seleccionadas' (edge pre-T > 0) contra las 'no seleccionadas'
+    (edge pre-T <= 0) en su rendimiento posterior. Si las seleccionadas siguen
+    ganando más, la habilidad PERSISTE (edge real). Si no, era sesgo/suerte.
+    """
+    cache: dict = {}
+    whales = top_whales(data, window=window, limit=universe)
+
+    wallet_trades: dict[str, list] = {}
+    all_tokens: list[str] = []
+    for w in whales:
+        try:
+            ts = data.user_trades(w["wallet"], limit=trades_per)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("trades de %s fallaron: %s", w["wallet"], e)
+            continue
+        wallet_trades[w["wallet"]] = ts
+        all_tokens += [str(t.get("asset", "")) for t in ts if t.get("asset")]
+
+    resolve_tokens(gamma, all_tokens, cache)
+
+    records: dict[str, list] = {}
+    total_resolved = 0
+    for wallet, trades in wallet_trades.items():
+        recs = _records(trades, cache)
+        if recs:
+            records[wallet] = recs
+            total_resolved += len(recs)
+
+    if total_resolved < 30:
+        return {"error": "pocos trades resueltos para un split fiable",
+                "n_total": total_resolved}
+
+    # Split POR CARTERA: la primera fracción temporal de cada wallet selecciona,
+    # el resto mide. Así cualifica cualquier cartera con histórico suficiente,
+    # sin depender de una fecha global (que excluía a las inactivas/recientes).
+    selected: list[str] = []
+    sel_after: list[tuple] = []
+    non_after: list[tuple] = []
+    qualified = 0
+    for wallet, recs in records.items():
+        recs.sort(key=lambda r: r[0])
+        k = int(len(recs) * split)
+        before, after = recs[:k], recs[k:]
+        if len(before) < min_side or len(after) < min_side:
+            continue
+        qualified += 1
+        pre = _edge(before)
+        if pre and pre["edge"] > 0:
+            selected.append(wallet)
+            sel_after += after
+        else:
+            non_after += after
+
+    return {
+        "qualified": qualified,
+        "n_selected": len(selected),
+        "sel": _edge(sel_after),
+        "non": _edge(non_after),
+    }
+
+
+def oos_verdict(report: dict) -> str:
+    if "error" in report:
+        return f"SIN DATOS: {report['error']}."
+    sel, non = report.get("sel"), report.get("non")
+    if not sel:
+        return "SIN DATOS: ninguna cartera seleccionada con suficientes trades post-corte."
+    se = sel["edge"]
+    ne = non["edge"] if non else 0.0
+    if se <= 0:
+        return "NO PERSISTE: el edge previo era sesgo de selección (suerte). Descartar."
+    if non and se > ne:
+        return "PERSISTE: las buenas-antes siguen ganando después → edge real, copiable."
+    return "AMBIGUO: edge post-corte positivo pero no claramente superior. Más datos."
