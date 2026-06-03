@@ -258,7 +258,58 @@ def walk_forward(
         "n_selected": len(selected),
         "sel": _edge(sel_after),
         "non": _edge(non_after),
+        "sel_records": sel_after,   # para el modelo de edge neto
     }
+
+
+# --------------------------------------------------------------------------- #
+# Edge NETO: ¿cuánto del edge sobrevive a las fricciones de copia?
+# --------------------------------------------------------------------------- #
+def net_summary(records: list[tuple], slippage: float, gas_usd: float = 0.02,
+                notional: float = 50.0) -> dict | None:
+    """Aplica fricciones de copia a un conjunto de trades (post-corte).
+
+    slippage = céntimos (en precio) que pagas PEOR que la whale (llegas tarde /
+    mueves el precio). gas_usd = coste fijo por trade. notional = tamaño asumido
+    por trade (amortiza el gas).
+
+    net_edge = win_rate − precio_efectivo_medio  (métrica robusta; >0 = rentable).
+    """
+    n = len(records)
+    if n == 0:
+        return None
+    gas_frac = gas_usd / notional if notional > 0 else 0.0
+    wins = pos = 0
+    sum_eff = sum_roi = 0.0
+    for _, p, payoff in records:
+        eff = min(p + slippage, 0.99)
+        roi = (payoff - eff) / eff - gas_frac
+        sum_eff += eff
+        sum_roi += roi
+        wins += 1 if payoff > 0 else 0
+        pos += 1 if roi > 0 else 0
+    return {
+        "slippage": slippage,
+        "n": n,
+        "win_rate": wins / n,
+        "avg_eff_entry": sum_eff / n,
+        "net_edge": wins / n - sum_eff / n,
+        "mean_roi": sum_roi / n,
+        "pos_rate": pos / n,
+    }
+
+
+def breakeven_slippage(records: list[tuple], gas_usd: float = 0.02,
+                       notional: float = 50.0, step: float = 0.0025,
+                       cap: float = 0.30) -> float:
+    """Slippage (en céntimos de precio) al que el net_edge cae a 0."""
+    s = 0.0
+    while s <= cap:
+        ns = net_summary(records, s, gas_usd, notional)
+        if not ns or ns["net_edge"] <= 0:
+            return s
+        s += step
+    return cap  # el edge aguanta más allá del tope explorado
 
 
 def oos_verdict(report: dict) -> str:

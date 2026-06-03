@@ -77,6 +77,7 @@ hermes journal                # historial de órdenes simuladas
 hermes whales                 # top carteras por beneficio (leaderboard)
 hermes validate-whales        # valida la tesis whale-follow (edge vs baseline)
 hermes whales-oos             # validación OOS: split temporal sin look-ahead
+hermes whales-net             # edge NETO tras fricciones de copia + breakeven
 ```
 
 Todo es solo lectura/simulación; nada de esto necesita wallet ni envía órdenes.
@@ -108,6 +109,7 @@ fichero `data_store/STOP` detienen todo.
 > las carteras buenas-antes mantienen **+24.6 pts** de edge después, frente a
 > **−7.4 pts** de las malas-antes (2110 vs 400 trades). El skill PERSISTE.
 >
-> Pendiente antes de arriesgar dinero: estimar el **edge NETO** tras fricciones
-> de copia (latencia, peor fill, spread, gas) — el +24.6 teórico se captura solo
-> en parte. HERMES sigue en paper.
+> **Edge neto**: sobrevive a las fricciones de copia — con slippage realista de
+> 5c sigue en **+20.2 pts** (77% de copias rentables) y no se anula hasta ~27c de
+> slippage (la copia real es 1-5c). Pendiente: validar fuera del universo del
+> leaderboard. HERMES sigue en paper hasta entonces.

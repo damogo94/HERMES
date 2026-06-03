@@ -15,6 +15,8 @@ from hermes.intelligence.arbitrage import ArbitrageDetector
 from hermes.intelligence.models import Opportunity
 from hermes.intelligence.scanner import Scanner
 from hermes.intelligence.whales import (
+    breakeven_slippage,
+    net_summary,
     oos_verdict,
     top_whales,
     verdict,
@@ -31,4 +33,6 @@ __all__ = [
     "verdict",
     "walk_forward",
     "oos_verdict",
+    "net_summary",
+    "breakeven_slippage",
 ]

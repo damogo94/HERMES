@@ -54,7 +54,7 @@
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   tr:last-child td { border-bottom: none; }
   .q { max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pos { color: var(--green); } .neg { color: var(--dim); }
+  .pos { color: var(--green); } .neg { color: var(--dim); } .dim { color: var(--dim); }
   .loading { padding: 18px; color: var(--dim); }
 
   /* ---- Diagrama de arquitectura ---- */
@@ -99,6 +99,7 @@
   </div>
   <div class="tabs">
     <button class="tab active" data-view="panel">Panel</button>
+    <button class="tab" data-view="whales">Whales</button>
     <button class="tab" data-view="sistema">Sistema</button>
   </div>
 </header>
@@ -122,6 +123,44 @@
         <button class="act" id="arb-run">Escanear</button>
       </div>
       <div id="arb-body" class="loading">Pulsa «Escanear» para buscar pares cuyo coste YES+NO &lt; $1.</div>
+    </section>
+  </div>
+
+  <!-- ================= WHALES ================= -->
+  <div class="view" id="view-whales">
+    <section>
+      <div class="head">
+        <h2>Top carteras por beneficio (en vivo)</h2>
+        <span class="meta" id="wh-meta">—</span>
+        <button class="act" id="wh-refresh">Refrescar</button>
+      </div>
+      <div id="wh-body" class="loading">Cargando leaderboard…</div>
+    </section>
+
+    <section>
+      <div class="head"><h2>whale-follow — validación</h2></div>
+      <div class="body-pad">
+        <p>¿Copiar a estas carteras tiene ventaja real? HERMES lo valida
+        out-of-sample (split temporal por cartera, sin look-ahead) y modela las
+        fricciones de copia.</p>
+        <table>
+          <thead><tr><th>Prueba</th><th class="num">Resultado</th></tr></thead>
+          <tbody>
+            <tr><td>Edge OOS (buenas-antes, post-corte)</td><td class="num pos">+24.6 pts</td></tr>
+            <tr><td>Control (malas-antes, post-corte)</td><td class="num neg">−7.4 pts</td></tr>
+            <tr><td>Edge neto con slippage de copia 5c</td><td class="num pos">+20.2 pts</td></tr>
+            <tr><td>Trades de copia rentables</td><td class="num pos">77%</td></tr>
+            <tr><td>Breakeven slippage</td><td class="num pos">~27c</td></tr>
+          </tbody>
+        </table>
+        <div style="height:14px"></div>
+        <div class="callout">
+          El edge sobrevive a fricciones realistas (copia 1-5c; breakeven ~27c).
+          Caveats: el universo es el leaderboard (no aleatorio); el modelo asume
+          que consigues fill; parte del edge podría ser velocidad/información no
+          copiable. Por eso HERMES sigue en <strong>paper</strong>.
+        </div>
+      </div>
     </section>
   </div>
 
@@ -224,9 +263,13 @@
           carteras con ventaja en su primera mitad temporal mantienen
           <span class="pos">+24.6 pts</span> de edge en la segunda, frente a
           <span class="neg">−7.4 pts</span> del resto (2110 vs 400 trades). El
-          skill <strong>persiste</strong>. Pendiente antes de operar: estimar el
-          edge <strong>neto</strong> tras fricciones de copia (latencia, peor
-          fill, spread, gas).
+          skill <strong>persiste</strong>.
+          <br><br>
+          <strong>Edge neto:</strong> tras modelar fricciones de copia, con un
+          slippage realista de 5c sigue en <span class="pos">+20.2 pts</span>
+          (77% de copias rentables) y no se anula hasta un slippage de ~27c —
+          muy por encima de la copia real (1-5c). Pendiente: validar fuera del
+          universo del leaderboard antes de operar.
         </div>
       </div>
     </section>
@@ -255,6 +298,7 @@
 <script>
 const GAMMA = "https://gamma-api.polymarket.com";
 const CLOB  = "https://clob.polymarket.com";
+const LB    = "https://lb-api.polymarket.com";
 
 const parseList = (v) => {
   if (Array.isArray(v)) return v;
@@ -266,6 +310,7 @@ const pct = (n) => (n * 100).toFixed(1) + "%";
 
 let MARKETS = [];
 let loadedPanel = false;
+let loadedWhales = false;
 
 /* ---- Pestañas ---- */
 document.querySelectorAll(".tab").forEach((tab) => {
@@ -275,8 +320,36 @@ document.querySelectorAll(".tab").forEach((tab) => {
     tab.classList.add("active");
     document.getElementById("view-" + tab.dataset.view).classList.add("active");
     if (tab.dataset.view === "panel" && !loadedPanel) loadMarkets();
+    if (tab.dataset.view === "whales" && !loadedWhales) loadWhales();
   });
 });
+
+async function loadWhales() {
+  loadedWhales = true;
+  const body = document.getElementById("wh-body");
+  body.className = "loading"; body.textContent = "Cargando leaderboard…";
+  try {
+    const res = await fetch(`${LB}/profit?window=all&limit=20`);
+    const raw = await res.json();
+    const list = Array.isArray(raw) ? raw : (raw.data || []);
+    const rows = list.map((w, i) => {
+      const name = w.name || w.pseudonym || (w.proxyWallet || "").slice(0, 10);
+      const amt = w.amount;
+      const amtS = (typeof amt === "number") ? fmtUsd(amt) : (amt ?? "—");
+      const wal = (w.proxyWallet || "").slice(0, 12);
+      return `<tr><td class="num">${i + 1}</td>
+        <td class="q">${String(name).replace(/</g, "&lt;")}</td>
+        <td class="num pos">${amtS}</td><td class="dim">${wal}…</td></tr>`;
+    }).join("");
+    document.getElementById("wh-body").outerHTML =
+      `<table id="wh-body"><thead><tr><th class="num">#</th><th>Cartera</th>
+       <th class="num">Beneficio</th><th>Wallet</th></tr></thead><tbody>${rows}</tbody></table>`;
+    document.getElementById("wh-meta").textContent =
+      `${list.length} carteras · ${new Date().toLocaleTimeString("es-ES")}`;
+  } catch (e) {
+    body.className = "loading"; body.textContent = "Error cargando leaderboard: " + e.message;
+  }
+}
 
 async function loadMarkets() {
   loadedPanel = true;
@@ -366,6 +439,7 @@ async function scanArb() {
 
 document.getElementById("mk-refresh").addEventListener("click", loadMarkets);
 document.getElementById("arb-run").addEventListener("click", scanArb);
+document.getElementById("wh-refresh").addEventListener("click", loadWhales);
 loadMarkets();
 </script>
 </body>

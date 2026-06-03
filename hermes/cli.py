@@ -401,6 +401,61 @@ def _cmd_whales_oos(args: argparse.Namespace) -> None:
     print(" 'buenas antes' siguen ganando, es skill copiable; si no, era suerte.")
 
 
+def _cmd_whales_net(args: argparse.Namespace) -> None:
+    try:
+        from hermes.data.data_api import DataAPIClient
+        from hermes.data.gamma import GammaClient
+        from hermes.intelligence.whales import (
+            breakeven_slippage,
+            net_summary,
+            walk_forward,
+        )
+    except ImportError:
+        print("Faltan dependencias. Instala con: pip install -e .")
+        return
+
+    print(f"Edge NETO: walk-forward (universo {args.universe}) + fricciones de copia. "
+          f"Resolviendo… puede tardar.")
+    data, gamma = DataAPIClient(), GammaClient()
+    try:
+        report = walk_forward(
+            data, gamma, universe=args.universe, trades_per=args.trades,
+            split=args.split, min_side=args.min_side,
+        )
+    finally:
+        data.close()
+        gamma.close()
+
+    if "error" in report:
+        print(" " + report["error"])
+        return
+    recs = report.get("sel_records") or []
+    if not recs:
+        print(" Sin trades de carteras seleccionadas; no se puede modelar el neto.")
+        return
+
+    print(_LINE)
+    print(" WHALE-FOLLOW — EDGE NETO tras fricciones de copia")
+    print(_LINE)
+    print(f" base: {report['n_selected']} carteras seleccionadas, {len(recs)} trades post-corte")
+    print(f" gas {args.gas}$/trade · nocional {args.notional}$/trade")
+    print(_LINE)
+    print(f" {'slippage':>9} | {'net edge':>9} | {'ROI medio':>10} | {'% positivos':>11}")
+    for s in (0.0, 0.005, 0.01, 0.02, 0.03, 0.05):
+        ns = net_summary(recs, s, gas_usd=args.gas, notional=args.notional)
+        cents = f"{s*100:.1f}c"
+        print(f" {cents:>9} | {ns['net_edge']*100:+8.2f} | {ns['mean_roi']*100:+9.2f}% | {ns['pos_rate']*100:9.0f}%")
+    be = breakeven_slippage(recs, gas_usd=args.gas, notional=args.notional)
+    print(_LINE)
+    be_s = f">{be*100:.0f}c" if be >= 0.30 else f"~{be*100:.1f}c"
+    print(f" BREAKEVEN slippage: {be_s}  (a partir de ahí el edge se anula)")
+    print(" Slippage de copia realista ≈ 1-5c. Si breakeven >> eso, el edge")
+    print(" sobrevive a copiar; si está cerca, copiar no es práctico.")
+    print(_LINE)
+    print(" 'net edge' (win_rate − precio efectivo) es la cifra robusta; el ROI")
+    print(" medio puede inflarse con tokens baratos. Aún no es OOS de universo.")
+
+
 def main() -> None:
     # Salida UTF-8 en consolas Windows (evita mojibake con acentos y «—»).
     try:
@@ -478,6 +533,14 @@ def main() -> None:
     p_oos.add_argument("--split", type=float, default=0.5, help="Fracción temporal de selección (resto = test).")
     p_oos.add_argument("--min-side", type=int, default=5, dest="min_side", help="Mín. trades por lado y cartera.")
 
+    p_net = sub.add_parser("whales-net", help="Edge NETO de whale-follow tras fricciones de copia.")
+    p_net.add_argument("-u", "--universe", type=int, default=40, help="Nº de carteras candidatas.")
+    p_net.add_argument("-t", "--trades", type=int, default=150, help="Trades por cartera.")
+    p_net.add_argument("--split", type=float, default=0.5, help="Fracción temporal de selección.")
+    p_net.add_argument("--min-side", type=int, default=5, dest="min_side", help="Mín. trades por lado.")
+    p_net.add_argument("--gas", type=float, default=0.02, help="Coste de gas por trade (USD).")
+    p_net.add_argument("--notional", type=float, default=50.0, help="Nocional por trade (USD).")
+
     args = parser.parse_args()
 
     if args.command == "markets":
@@ -498,6 +561,8 @@ def main() -> None:
         _cmd_validate_whales(args)
     elif args.command == "whales-oos":
         _cmd_whales_oos(args)
+    elif args.command == "whales-net":
+        _cmd_whales_net(args)
     else:  # status (por defecto)
         _cmd_status(args)
 
