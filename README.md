@@ -16,10 +16,16 @@ y está aislado a propósito. No se necesita wallet hasta la fase 5.
 
 ## Dashboard (Vercel)
 
+**En vivo:** https://hermes-blush-seven.vercel.app
+
 `web/index.html` es un panel estático (sin servidor) que lee datos en vivo de
 Polymarket desde el navegador (CORS abierto) y muestra mercados activos + un
 escáner de arbitraje YES/NO. Es **solo lectura**: no envía órdenes. Se despliega
 en Vercel sirviendo el directorio `web/` (ver `vercel.json`).
+
+Redesplegar tras cambios:
+`npx vercel deploy --prod --yes --scope damogo-s-projects` (o conecta el repo en
+Vercel para deploy automático en cada push).
 
 ## Arquitectura
 
