@@ -14,5 +14,17 @@ Componentes:
 from hermes.intelligence.arbitrage import ArbitrageDetector
 from hermes.intelligence.models import Opportunity
 from hermes.intelligence.scanner import Scanner
+from hermes.intelligence.whales import (
+    top_whales,
+    verdict,
+    whale_follow_report,
+)
 
-__all__ = ["Opportunity", "ArbitrageDetector", "Scanner"]
+__all__ = [
+    "Opportunity",
+    "ArbitrageDetector",
+    "Scanner",
+    "top_whales",
+    "whale_follow_report",
+    "verdict",
+]

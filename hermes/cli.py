@@ -277,6 +277,76 @@ def _cmd_journal(args: argparse.Namespace) -> None:
         )
 
 
+def _cmd_whales(args: argparse.Namespace) -> None:
+    try:
+        from hermes.data.data_api import DataAPIClient
+        from hermes.intelligence.whales import top_whales
+    except ImportError:
+        print("Faltan dependencias. Instala con: pip install -e .")
+        return
+    data = DataAPIClient()
+    try:
+        whales = top_whales(data, window=args.window, limit=args.limit)
+    finally:
+        data.close()
+    print(_LINE)
+    print(f" Top carteras por beneficio (window={args.window})")
+    print(_LINE)
+    if not whales:
+        print(" (sin datos)")
+        return
+    for i, w in enumerate(whales, 1):
+        prof = w.get("profit")
+        prof_s = f"${prof:,.0f}" if isinstance(prof, (int, float)) else str(prof)
+        print(f" {i:>2}. {prof_s:>14}  {w['name'][:28]:28}  {w['wallet'][:12]}…")
+
+
+def _cmd_validate_whales(args: argparse.Namespace) -> None:
+    try:
+        from hermes.data.data_api import DataAPIClient
+        from hermes.data.gamma import GammaClient
+        from hermes.intelligence.whales import verdict, whale_follow_report
+    except ImportError:
+        print("Faltan dependencias. Instala con: pip install -e .")
+        return
+
+    print(f"Validando whale-follow: {args.whales} whales × {args.trades} trades "
+          f"(window={args.window}). Resolviendo mercados… puede tardar.")
+    data, gamma = DataAPIClient(), GammaClient()
+    try:
+        report = whale_follow_report(
+            data, gamma,
+            n_whales=args.whales, trades_per=args.trades,
+            window=args.window, baseline_wallets=args.baseline,
+        )
+    finally:
+        data.close()
+        gamma.close()
+
+    def fmt(ev, titulo):
+        print(f" {titulo}")
+        if not ev:
+            print("   (sin trades resueltos suficientes)")
+            return
+        print(f"   trades resueltos . {ev['n']}")
+        print(f"   win rate ......... {ev['win_rate'] * 100:.1f}%")
+        print(f"   precio medio ..... {ev['avg_entry']:.3f}  (prob. implícita)")
+        print(f"   EDGE ............. {ev['edge'] * 100:+.2f} pts  (win_rate − precio)")
+        print(f"   ROI medio/trade .. {ev['mean_roi'] * 100:+.2f}%")
+
+    print(_LINE)
+    print(" WHALE-FOLLOW — out-of-sample (resolución vs precio de entrada)")
+    print(_LINE)
+    fmt(report["whale_eval"], "WHALES (top leaderboard):")
+    print()
+    fmt(report["base_eval"], "BASELINE (traders aleatorios):")
+    print(_LINE)
+    print(" VEREDICTO: " + verdict(report))
+    print(_LINE)
+    print(" Edge = ¿aciertan más de lo que su precio de entrada implica?")
+    print(" Caveat: selección por beneficio pasado; no es OOS puro.")
+
+
 def main() -> None:
     # Salida UTF-8 en consolas Windows (evita mojibake con acentos y «—»).
     try:
@@ -338,6 +408,16 @@ def main() -> None:
     p_journal = sub.add_parser("journal", help="Muestra el journal de órdenes simuladas.")
     p_journal.add_argument("-n", "--limit", type=int, default=15, help="Entradas a mostrar.")
 
+    p_whales = sub.add_parser("whales", help="Top carteras por beneficio (leaderboard).")
+    p_whales.add_argument("-n", "--limit", type=int, default=15, help="Cuántas mostrar.")
+    p_whales.add_argument("--window", default="all", help="Ventana: all (1d/7d/30d pueden funcionar).")
+
+    p_vw = sub.add_parser("validate-whales", help="Valida la tesis whale-follow (edge vs baseline).")
+    p_vw.add_argument("-w", "--whales", type=int, default=6, help="Nº de whales a copiar.")
+    p_vw.add_argument("-t", "--trades", type=int, default=15, help="Trades por whale.")
+    p_vw.add_argument("--window", default="all", help="Ventana del leaderboard.")
+    p_vw.add_argument("--baseline", type=int, default=12, help="Nº de carteras aleatorias para el baseline.")
+
     args = parser.parse_args()
 
     if args.command == "markets":
@@ -352,6 +432,10 @@ def main() -> None:
         _cmd_paper(args)
     elif args.command == "journal":
         _cmd_journal(args)
+    elif args.command == "whales":
+        _cmd_whales(args)
+    elif args.command == "validate-whales":
+        _cmd_validate_whales(args)
     else:  # status (por defecto)
         _cmd_status(args)
 

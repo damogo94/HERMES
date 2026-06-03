@@ -12,6 +12,7 @@ Clientes:
 
 from hermes.data.archive import ArchiveClient
 from hermes.data.clob import ClobReadClient
+from hermes.data.data_api import DataAPIClient
 from hermes.data.gamma import GammaClient
 from hermes.data.models import Market, OrderBook, OrderLevel, Trade
 
@@ -19,6 +20,7 @@ __all__ = [
     "GammaClient",
     "ClobReadClient",
     "ArchiveClient",
+    "DataAPIClient",
     "Market",
     "OrderBook",
     "OrderLevel",

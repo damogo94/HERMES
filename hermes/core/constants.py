@@ -11,6 +11,7 @@ POLYMARKET_CLOB_REST = "https://clob.polymarket.com"
 POLYMARKET_CLOB_WS = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 POLYMARKET_GAMMA = "https://gamma-api.polymarket.com"
 POLYMARKET_DATA_API = "https://data-api.polymarket.com"
+POLYMARKET_LB_API = "https://lb-api.polymarket.com"  # leaderboard (profit/volume)
 
 # ---- Polygon ----
 POLYGON_CHAIN_ID = 137

@@ -74,6 +74,8 @@ hermes backtest -q bitcoin    # backtest mark-to-market de una estrategia
 hermes validate -m 25 -s momentum --spread 0.02   # validación out-of-sample con costes
 hermes paper -q bitcoin --size 10  # pasa una orden por riesgo+ejecución (DRY-RUN)
 hermes journal                # historial de órdenes simuladas
+hermes whales                 # top carteras por beneficio (leaderboard)
+hermes validate-whales        # valida la tesis whale-follow (edge vs baseline)
 ```
 
 Todo es solo lectura/simulación; nada de esto necesita wallet ni envía órdenes.
@@ -97,8 +99,11 @@ pongas `HERMES_DRY_RUN=false`, la ruta de envío está deliberadamente sin
 implementar (Fase 5) y devuelve `blocked`. Además, `HERMES_KILL_SWITCH=true` o un
 fichero `data_store/STOP` detienen todo.
 
-> ⚠️ Validación honesta (retorno **compuesto**, neto de spread 2¢): ni
-> `mean_reversion` ni `momentum` superan a comprar-y-mantener out-of-sample
-> (exceso −57% y −73% respectivamente) — **ninguna tiene edge**. HERMES tiene la
-> fontanería lista pero **no una estrategia ganadora**; sigue en paper hasta que
-> alguna pase `validate` (exceso sobre buy&hold positivo y train≈test).
+> ⚠️ Estrategias de precio (`mean_reversion`, `momentum`): **sin edge** —
+> no superan a comprar-y-mantener tras costes (validación compuesta, spread 2¢).
+>
+> ✅ **whale-follow**: primera señal **positiva** — las top carteras aciertan el
+> 90% entrando a precio medio 0.58 (edge +32 pts) frente a +3.8 pts de traders
+> aleatorios. Promete, pero la selección es por beneficio pasado (no OOS puro):
+> falta confirmarlo con un **split temporal** (elegir whales con datos antiguos y
+> medir solo sus trades posteriores) antes de confiar. HERMES sigue en paper.
