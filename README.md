@@ -71,7 +71,7 @@ hermes markets -q bitcoin -n 5  # busca por texto
 hermes scan                   # detecta arbitraje YES/NO en mercados activos
 hermes scan -n 60 -e 0.005    # escanea 60 mercados, edge mín 0.5%
 hermes backtest -q bitcoin    # backtest mark-to-market de una estrategia
-hermes validate -m 25         # validación out-of-sample (train/test, costes, baseline)
+hermes validate -m 25 -s momentum --spread 0.02   # validación out-of-sample con costes
 hermes paper -q bitcoin --size 10  # pasa una orden por riesgo+ejecución (DRY-RUN)
 hermes journal                # historial de órdenes simuladas
 ```
@@ -97,6 +97,8 @@ pongas `HERMES_DRY_RUN=false`, la ruta de envío está deliberadamente sin
 implementar (Fase 5) y devuelve `blocked`. Además, `HERMES_KILL_SWITCH=true` o un
 fichero `data_store/STOP` detienen todo.
 
-> ⚠️ El backtest reveló que `MeanReversion` **no tiene edge fiable** (overfit:
-> train ≈ 2× test). HERMES tiene la fontanería lista pero **no una estrategia
-> ganadora** — debe seguir en paper hasta que una estrategia pase `validate`.
+> ⚠️ Validación honesta (retorno **compuesto**, neto de spread 2¢): ni
+> `mean_reversion` ni `momentum` superan a comprar-y-mantener out-of-sample
+> (exceso −57% y −73% respectivamente) — **ninguna tiene edge**. HERMES tiene la
+> fontanería lista pero **no una estrategia ganadora**; sigue en paper hasta que
+> alguna pase `validate` (exceso sobre buy&hold positivo y train≈test).

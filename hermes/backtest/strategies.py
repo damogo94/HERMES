@@ -85,3 +85,83 @@ class MeanReversion(Strategy):
             self._entry = None
             return "SELL"
         return None
+
+
+class Momentum(Strategy):
+    """
+    Seguimiento de tendencia (lo contrario de la reversión).
+
+    - Entra (BUY) si NO hay posición y el precio sube por encima de
+      ``sma * (1 + band)`` (rompe al alza su media reciente).
+    - Sale (SELL) si HAY posición y el precio cae por debajo de la ``sma``
+      (la tendencia se agota), o por take_profit / stop_loss.
+    """
+
+    name = "momentum"
+
+    def __init__(
+        self,
+        window: int = 24,
+        band: float = 0.05,
+        take_profit: float | None = None,
+        stop_loss: float | None = None,
+    ):
+        self.window = max(2, window)
+        self.band = band
+        self.take_profit = take_profit
+        self.stop_loss = stop_loss
+        self._prices: deque[float] = deque(maxlen=self.window)
+        self._entry: float | None = None
+
+    def reset(self) -> None:
+        self._prices.clear()
+        self._entry = None
+
+    def _sma(self) -> float | None:
+        if len(self._prices) < self.window:
+            return None
+        return sum(self._prices) / len(self._prices)
+
+    def on_tick(self, t: int, price: float, in_position: bool) -> str | None:
+        sma = self._sma()
+        self._prices.append(price)
+        if sma is None:
+            return None
+
+        if not in_position:
+            if price > sma * (1.0 + self.band):
+                self._entry = price
+                return "BUY"
+            return None
+
+        if self._entry is not None and self._entry > 0:
+            ret = (price - self._entry) / self._entry
+            if self.take_profit is not None and ret >= self.take_profit:
+                self._entry = None
+                return "SELL"
+            if self.stop_loss is not None and ret <= -abs(self.stop_loss):
+                self._entry = None
+                return "SELL"
+        if price < sma:
+            self._entry = None
+            return "SELL"
+        return None
+
+
+_STRATEGIES = {
+    "mean_reversion": MeanReversion,
+    "momentum": Momentum,
+}
+
+
+def build_strategy(name: str, window: int = 24, band: float = 0.05) -> Strategy:
+    """Crea una estrategia por nombre. Lanza ValueError si no existe."""
+    cls = _STRATEGIES.get(name)
+    if cls is None:
+        opciones = ", ".join(sorted(_STRATEGIES))
+        raise ValueError(f"Estrategia desconocida '{name}'. Opciones: {opciones}")
+    return cls(window=window, band=band)
+
+
+def strategy_names() -> list[str]:
+    return sorted(_STRATEGIES)

@@ -52,14 +52,25 @@ class BacktestResult:
 
 
 class Backtester:
-    def __init__(self, fee_bps: float = 0.0, slippage: float = 0.0, size: float = 1.0):
+    def __init__(
+        self,
+        fee_bps: float = 0.0,
+        slippage: float = 0.0,
+        spread: float = 0.0,
+        size: float = 1.0,
+    ):
         """
         fee_bps  — comisión por operación en puntos básicos del nocional (0 = sin fee).
         slippage — fracción de deslizamiento aplicada al precio de cada fill.
+        spread   — coste ABSOLUTO de cruzar el bid/ask (en unidades de precio, p. ej.
+                   0.02 = 2 céntimos por ida y vuelta). Compras a precio+spread/2 y
+                   vendes a precio-spread/2. Es el coste dominante y realista en
+                   mercados de predicción (la serie de prices-history es ~mid).
         size     — tamaño fijo (en "shares") por operación.
         """
         self.fee_bps = fee_bps
         self.slippage = slippage
+        self.spread = spread
         self.size = size
 
     def _fee(self, price: float) -> float:
@@ -74,18 +85,18 @@ class Backtester:
             action = strategy.on_tick(t, price, in_position=pos is not None)
 
             if action == "BUY" and pos is None:
-                eff = price * (1.0 + self.slippage)
+                eff = price * (1.0 + self.slippage) + self.spread / 2.0
                 pos = {"t": t, "price": eff, "fee": self._fee(eff)}
 
             elif action == "SELL" and pos is not None:
-                eff = price * (1.0 - self.slippage)
+                eff = price * (1.0 - self.slippage) - self.spread / 2.0
                 trades.append(self._close(pos, t, eff, forced=False))
                 pos = None
 
         # Cierre forzoso al final de la serie (mark-to-market).
         if pos is not None and series:
             last_t, last_p = series[-1]
-            eff = last_p * (1.0 - self.slippage)
+            eff = last_p * (1.0 - self.slippage) - self.spread / 2.0
             trades.append(self._close(pos, last_t, eff, forced=True))
 
         return BacktestResult(

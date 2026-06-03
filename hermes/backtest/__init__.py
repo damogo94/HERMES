@@ -16,7 +16,13 @@ Componentes:
 from hermes.backtest.data import load_series, pick_market
 from hermes.backtest.engine import Backtester, BacktestResult, ClosedTrade
 from hermes.backtest.metrics import Summary, summarize
-from hermes.backtest.strategies import MeanReversion, Strategy
+from hermes.backtest.strategies import (
+    MeanReversion,
+    Momentum,
+    Strategy,
+    build_strategy,
+    strategy_names,
+)
 from hermes.backtest.validation import (
     MarketEval,
     ValidationReport,
@@ -31,6 +37,9 @@ __all__ = [
     "ClosedTrade",
     "Strategy",
     "MeanReversion",
+    "Momentum",
+    "build_strategy",
+    "strategy_names",
     "summarize",
     "Summary",
     "load_series",

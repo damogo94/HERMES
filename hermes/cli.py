@@ -112,7 +112,7 @@ def _cmd_backtest(args: argparse.Namespace) -> None:
         from hermes.backtest.data import load_series, pick_market
         from hermes.backtest.engine import Backtester
         from hermes.backtest.metrics import summarize
-        from hermes.backtest.strategies import MeanReversion
+        from hermes.backtest.strategies import build_strategy
         from hermes.data.clob import ClobReadClient
         from hermes.data.gamma import GammaClient
     except ImportError:
@@ -137,17 +137,15 @@ def _cmd_backtest(args: argparse.Namespace) -> None:
         print(f" Serie insuficiente ({len(series)} puntos). Prueba otro mercado/intervalo.")
         return
 
-    strat = MeanReversion(
-        window=args.window,
-        band=args.band,
-        take_profit=args.take_profit,
-        stop_loss=args.stop_loss,
+    strat = build_strategy(args.strategy, window=args.window, band=args.band)
+    bt = Backtester(
+        fee_bps=args.fee_bps, slippage=args.slippage, spread=args.spread, size=1.0
     )
-    bt = Backtester(fee_bps=args.fee_bps, slippage=args.slippage, size=1.0)
     result = bt.run(series, strat)
     summary = summarize(result)
 
-    print(f" estrategia ....... mean_reversion(window={args.window}, band={args.band})")
+    print(f" estrategia ....... {args.strategy}(window={args.window}, band={args.band})")
+    print(f" costes ........... fee={args.fee_bps}bps slippage={args.slippage} spread={args.spread}")
     print(f" datos ............ {len(series)} puntos, intervalo={args.interval}")
     print(f" precio ........... primero={series[0][1]:.3f}  último={series[-1][1]:.3f}")
     print(_LINE)
@@ -165,15 +163,16 @@ def _cmd_validate(args: argparse.Namespace) -> None:
         print("Faltan dependencias. Instala con: pip install -e .")
         return
 
-    print(f"Validando mean_reversion sobre ~{args.markets} mercados "
-          f"(train/test {args.split:.0%}, fee={args.fee_bps}bps, slippage={args.slippage})...")
+    print(f"Validando {args.strategy} sobre ~{args.markets} mercados "
+          f"(train/test {args.split:.0%}, spread={args.spread}, slippage={args.slippage})...")
     print("Puede tardar (una petición de histórico por mercado).")
     report = validate(
-        strategy_params={"window": args.window, "band": args.band},
+        strategy_params={"strategy": args.strategy, "window": args.window, "band": args.band},
         n_markets=args.markets,
         interval=args.interval,
         fee_bps=args.fee_bps,
         slippage=args.slippage,
+        spread=args.spread,
         split=args.split,
     )
     print(_LINE)
@@ -184,9 +183,8 @@ def _cmd_validate(args: argparse.Namespace) -> None:
     print(_LINE)
     print(" VEREDICTO: " + report.verdict())
     print(_LINE)
-    print(" Nota: los retornos son SUMA de % por trade y SOBREESTIMAN mucho en")
-    print(" tokens baratos/volátiles; el slippage fraccional infravalora el spread")
-    print(" real (en céntimos). Fíate del VEREDICTO y de train≈test, no de la magnitud.")
+    print(" Retornos COMPUESTOS y netos de spread. Lo único que vale es el EXCESO")
+    print(" sobre buy&hold; y que train≈test (robusto, no sobreajustado).")
 
 
 def _cmd_paper(args: argparse.Namespace) -> None:
@@ -310,21 +308,25 @@ def main() -> None:
 
     p_bt = sub.add_parser("backtest", help="Backtest mark-to-market de una estrategia.")
     p_bt.add_argument("-q", "--query", default=None, help="Mercado a usar (texto). Si no, el primero activo.")
+    p_bt.add_argument("-s", "--strategy", default="mean_reversion",
+                      choices=["mean_reversion", "momentum"], help="Estrategia.")
     p_bt.add_argument("--interval", default="1m", help="Ventana histórica (max,1m,1w,1d,6h,1h).")
     p_bt.add_argument("--window", type=int, default=24, help="Ventana SMA (nº de puntos).")
-    p_bt.add_argument("--band", type=float, default=0.05, help="Banda de entrada (fracción bajo la SMA).")
-    p_bt.add_argument("--take-profit", type=float, default=None, dest="take_profit", help="Take-profit (fracción).")
-    p_bt.add_argument("--stop-loss", type=float, default=None, dest="stop_loss", help="Stop-loss (fracción).")
+    p_bt.add_argument("--band", type=float, default=0.05, help="Banda de entrada (fracción sobre/bajo la SMA).")
     p_bt.add_argument("--fee-bps", type=float, default=0.0, dest="fee_bps", help="Comisión por op (bps).")
     p_bt.add_argument("--slippage", type=float, default=0.0, help="Slippage por fill (fracción).")
+    p_bt.add_argument("--spread", type=float, default=0.0, help="Coste de spread absoluto (ida+vuelta, p. ej. 0.02).")
 
     p_val = sub.add_parser("validate", help="Validación seria: multi-mercado, costes, train/test, baseline.")
     p_val.add_argument("-m", "--markets", type=int, default=25, help="Nº de mercados a validar.")
+    p_val.add_argument("-s", "--strategy", default="mean_reversion",
+                       choices=["mean_reversion", "momentum"], help="Estrategia.")
     p_val.add_argument("--interval", default="1m", help="Ventana histórica (max,1m,1w,1d,6h,1h).")
     p_val.add_argument("--window", type=int, default=24, help="Ventana SMA.")
     p_val.add_argument("--band", type=float, default=0.05, help="Banda de entrada.")
     p_val.add_argument("--fee-bps", type=float, default=0.0, dest="fee_bps", help="Comisión por op (bps).")
-    p_val.add_argument("--slippage", type=float, default=0.01, help="Slippage por fill (fracción).")
+    p_val.add_argument("--slippage", type=float, default=0.0, help="Slippage por fill (fracción).")
+    p_val.add_argument("--spread", type=float, default=0.02, help="Coste de spread absoluto (ida+vuelta).")
     p_val.add_argument("--split", type=float, default=0.5, help="Proporción train (resto = test).")
 
     p_paper = sub.add_parser("paper", help="Pasa un OrderIntent por riesgo+ejecución (DRY-RUN).")

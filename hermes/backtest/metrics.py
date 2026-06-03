@@ -14,7 +14,8 @@ class Summary:
     win_rate: float
     total_pnl: float          # en unidades de precio * size (≈ USDC si size en shares)
     avg_ret: float            # retorno medio por trade
-    total_ret: float          # suma de retornos por trade
+    total_ret: float          # SUMA de retornos por trade (referencia; sobreestima)
+    compounded_ret: float     # retorno COMPUESTO reinvirtiendo (la cifra honesta)
     max_drawdown: float       # peor caída del equity acumulado
     best_ret: float
     worst_ret: float
@@ -23,9 +24,9 @@ class Summary:
         return [
             f"trades ........... {self.n_trades}",
             f"win rate ......... {self.win_rate * 100:.1f}%  ({self.wins}/{self.n_trades})",
-            f"P&L total ........ {self.total_pnl:+.4f}",
+            f"retorno COMPUESTO  {self.compounded_ret * 100:+.2f}%   <- la cifra honesta",
             f"retorno medio .... {self.avg_ret * 100:+.2f}% / trade",
-            f"retorno total .... {self.total_ret * 100:+.2f}%",
+            f"suma de retornos . {self.total_ret * 100:+.2f}%  (referencia, sobreestima)",
             f"mejor / peor ..... {self.best_ret * 100:+.2f}% / {self.worst_ret * 100:+.2f}%",
             f"max drawdown ..... {self.max_drawdown:.4f}",
         ]
@@ -44,10 +45,17 @@ def summarize(result: BacktestResult) -> Summary:
     trades = result.trades
     n = len(trades)
     if n == 0:
-        return Summary(0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        return Summary(0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
     rets = [t.ret for t in trades]
     wins = sum(1 for t in trades if t.pnl > 0)
+
+    # Retorno compuesto: reinvierte todo el capital en cada trade secuencial.
+    compounded = 1.0
+    for r in rets:
+        compounded *= (1.0 + r)
+    compounded -= 1.0
+
     return Summary(
         n_trades=n,
         wins=wins,
@@ -55,6 +63,7 @@ def summarize(result: BacktestResult) -> Summary:
         total_pnl=result.total_pnl,
         avg_ret=sum(rets) / n,
         total_ret=sum(rets),
+        compounded_ret=compounded,
         max_drawdown=_max_drawdown(result.equity_curve),
         best_ret=max(rets),
         worst_ret=min(rets),

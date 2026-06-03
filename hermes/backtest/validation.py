@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 
 from hermes.backtest.engine import Backtester
 from hermes.backtest.metrics import summarize
-from hermes.backtest.strategies import MeanReversion
+from hermes.backtest.strategies import build_strategy
 from hermes.core.logging import get_logger
 from hermes.data.clob import ClobReadClient
 from hermes.data.gamma import GammaClient
@@ -61,10 +61,12 @@ class MarketEval:
 
 def evaluate_market(
     series: Series,
+    strategy: str,
     window: int,
     band: float,
     fee_bps: float,
     slippage: float,
+    spread: float,
     split: float,
     question: str = "",
 ) -> MarketEval | None:
@@ -73,10 +75,10 @@ def evaluate_market(
         return None
 
     def run(seg: Series) -> tuple[float, int]:
-        strat = MeanReversion(window=window, band=band)
-        res = Backtester(fee_bps=fee_bps, slippage=slippage).run(seg, strat)
+        strat = build_strategy(strategy, window=window, band=band)
+        res = Backtester(fee_bps=fee_bps, slippage=slippage, spread=spread).run(seg, strat)
         s = summarize(res)
-        return s.total_ret, s.n_trades
+        return s.compounded_ret, s.n_trades  # retorno COMPUESTO (honesto)
 
     train_ret, _ = run(train)
     test_ret, test_trades = run(test)
@@ -92,8 +94,10 @@ def evaluate_market(
 @dataclass
 class ValidationReport:
     evals: list[MarketEval] = field(default_factory=list)
+    strategy: str = "mean_reversion"
     fee_bps: float = 0.0
     slippage: float = 0.0
+    spread: float = 0.0
 
     @property
     def n(self) -> int:
@@ -143,10 +147,11 @@ class ValidationReport:
 
     def as_lines(self) -> list[str]:
         return [
+            f"estrategia ........... {self.strategy}",
             f"mercados validados ... {self.n}",
-            f"costes ............... fee={self.fee_bps}bps  slippage={self.slippage}",
-            f"retorno medio TRAIN .. {self.mean_train_ret * 100:+.2f}%",
-            f"retorno medio TEST ... {self.mean_test_ret * 100:+.2f}%",
+            f"costes ............... fee={self.fee_bps}bps  slippage={self.slippage}  spread={self.spread}",
+            f"retorno medio TRAIN .. {self.mean_train_ret * 100:+.2f}%  (compuesto)",
+            f"retorno medio TEST ... {self.mean_test_ret * 100:+.2f}%  (compuesto)",
             f"buy&hold medio TEST .. {self.mean_bh_test_ret * 100:+.2f}%",
             f"EXCESO sobre b&h ..... {self.excess * 100:+.2f}%   <- la cifra que importa",
             f"supera a b&h ......... {self.beat_bh_rate * 100:.0f}% de los mercados",
@@ -161,7 +166,8 @@ def validate(
     interval: str = "1m",
     min_points: int = 100,
     fee_bps: float = 0.0,
-    slippage: float = 0.01,
+    slippage: float = 0.0,
+    spread: float = 0.02,
     split: float = 0.5,
     gamma: GammaClient | None = None,
     clob: ClobReadClient | None = None,
@@ -170,10 +176,13 @@ def validate(
 
     g = gamma or GammaClient()
     c = clob or ClobReadClient()
+    strategy = strategy_params.get("strategy", "mean_reversion")
     window = strategy_params.get("window", 24)
     band = strategy_params.get("band", 0.05)
 
-    report = ValidationReport(fee_bps=fee_bps, slippage=slippage)
+    report = ValidationReport(
+        strategy=strategy, fee_bps=fee_bps, slippage=slippage, spread=spread
+    )
     try:
         # Escanea más mercados de los que validaremos (algunos no tendrán histórico).
         universe = g.list_markets(active=True, closed=False, limit=max(n_markets * 3, 60))
@@ -190,8 +199,8 @@ def validate(
             if len(series) < min_points:
                 continue
             ev = evaluate_market(
-                series, window=window, band=band, fee_bps=fee_bps,
-                slippage=slippage, split=split, question=m.question,
+                series, strategy=strategy, window=window, band=band, fee_bps=fee_bps,
+                slippage=slippage, spread=spread, split=split, question=m.question,
             )
             if ev is not None:
                 report.evals.append(ev)
