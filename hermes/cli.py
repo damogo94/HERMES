@@ -72,6 +72,41 @@ def _cmd_markets(args: argparse.Namespace) -> None:
         print(f" YES {yp}  vol {vol:>12}  {q}")
 
 
+def _cmd_scan(args: argparse.Namespace) -> None:
+    try:
+        from hermes.intelligence.scanner import Scanner
+    except ImportError:
+        print("Faltan dependencias. Instala con: pip install -e .")
+        return
+
+    print(f"Escaneando {args.limit} mercados activos en busca de arbitraje "
+          f"(edge mín {args.min_edge*100:.1f}%)... puede tardar un momento.")
+    scanner = Scanner(min_edge=args.min_edge)
+    try:
+        opps = scanner.scan_arbitrage(limit=args.limit)
+    finally:
+        scanner.close()
+
+    print(_LINE)
+    print(f" Oportunidades de arbitraje  ({len(opps)})")
+    print(_LINE)
+    if not opps:
+        print(" Ninguna por encima del umbral. (Los arbs reales son raros y")
+        print(" se cierran rápido; prueba a subir --limit o bajar --min-edge.)")
+        return
+    for o in opps:
+        ay = o.detail.get("ask_yes")
+        an = o.detail.get("ask_no")
+        print(
+            f" edge {o.edge_pct:5.2f}%  ~${o.est_profit_usd:>8,.2f}  "
+            f"(YES {ay:.3f} + NO {an:.3f})  "
+            f"{(o.question[:46] + '…') if len(o.question) > 47 else o.question}"
+        )
+    print(_LINE)
+    print(" Solo DETECCIÓN (DRY-RUN). No se ha enviado ninguna orden.")
+    print(" El edge teórico aún debe cubrir gas y posible slippage.")
+
+
 def main() -> None:
     # Salida UTF-8 en consolas Windows (evita mojibake con acentos y «—»).
     try:
@@ -94,10 +129,19 @@ def main() -> None:
     p_markets.add_argument("-q", "--query", default=None, help="Filtra por texto en la pregunta.")
     p_markets.add_argument("-n", "--limit", type=int, default=10, help="Máximo de resultados.")
 
+    p_scan = sub.add_parser("scan", help="Detecta arbitraje YES/NO en mercados activos.")
+    p_scan.add_argument("-n", "--limit", type=int, default=40, help="Mercados a escanear.")
+    p_scan.add_argument(
+        "-e", "--min-edge", type=float, default=0.01, dest="min_edge",
+        help="Edge mínimo (fracción, p. ej. 0.01 = 1%%).",
+    )
+
     args = parser.parse_args()
 
     if args.command == "markets":
         _cmd_markets(args)
+    elif args.command == "scan":
+        _cmd_scan(args)
     else:  # status (por defecto)
         _cmd_status(args)
 

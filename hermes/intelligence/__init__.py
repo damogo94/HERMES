@@ -1,9 +1,18 @@
 """
 Capa de inteligencia (Fase 2).
 
-Detecta oportunidades y genera señales: arbitraje Up/Down 5min, mispricing,
-calibración, seguimiento de whales. Si se activa el LLM, este SOLO puntúa
-señales; nunca tiene autoridad para gastar.
+Detecta oportunidades y genera señales sobre la capa de datos. SOLO LECTURA +
+cálculo: nunca firma ni envía órdenes. Si se activa el LLM, este solo puntúa
+señales; no tiene autoridad para gastar.
 
-Pendiente de implementar en la Fase 2.
+Componentes:
+    Opportunity        — una oportunidad detectada (señal)
+    ArbitrageDetector  — arbitraje binario YES/NO (ask_yes + ask_no < $1)
+    Scanner            — orquesta datos + detectores
 """
+
+from hermes.intelligence.arbitrage import ArbitrageDetector
+from hermes.intelligence.models import Opportunity
+from hermes.intelligence.scanner import Scanner
+
+__all__ = ["Opportunity", "ArbitrageDetector", "Scanner"]

@@ -55,13 +55,18 @@ Comandos disponibles:
 hermes status                 # modo (DRY-RUN), venue, caps, wallet/LLM
 hermes markets                # lista mercados activos de Polymarket
 hermes markets -q bitcoin -n 5  # busca por texto
+hermes scan                   # detecta arbitraje YES/NO en mercados activos
+hermes scan -n 60 -e 0.005    # escanea 60 mercados, edge mín 0.5%
 ```
 
 Todo es solo lectura; nada de esto necesita wallet.
 
 ## Estado
 
-**Fase 1** — capa de datos (solo lectura) implementada:
-`GammaClient` (mercados), `ClobReadClient` (order book / precios / histórico) y
-`ArchiveClient` (snapshots Parquet de pmxt). Aún sin lógica de inteligencia ni
-de trading.
+**Fase 2** — inteligencia (solo lectura + cálculo):
+- Capa de datos: `GammaClient`, `ClobReadClient`, `ArchiveClient`.
+- Detección: `ArbitrageDetector` (arbitraje binario YES/NO: `ask_yes + ask_no < $1`)
+  y `Scanner` que lo aplica a los mercados activos (`hermes scan`).
+
+Aún sin estrategia, riesgo ni ejecución. Próximo: más detectores (mispricing,
+whale-follow) y backtesting.
