@@ -14,6 +14,13 @@ HERMES hace todo el ciclo (lee mercados, detecta oportunidades, decide y *constr
 pero **nunca las transmite**. El único módulo que toca la clave privada es `hermes/execution/`,
 y está aislado a propósito. No se necesita wallet hasta la fase 5.
 
+## Dashboard (Vercel)
+
+`web/index.html` es un panel estático (sin servidor) que lee datos en vivo de
+Polymarket desde el navegador (CORS abierto) y muestra mercados activos + un
+escáner de arbitraje YES/NO. Es **solo lectura**: no envía órdenes. Se despliega
+en Vercel sirviendo el directorio `web/` (ver `vercel.json`).
+
 ## Arquitectura
 
 ```

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HERMES — Panel</title>
+<style>
+  :root {
+    --bg: #0b0e14; --panel: #131722; --line: #232a3a;
+    --txt: #d7dce5; --dim: #7d8597; --green: #2ecc71; --red: #e74c3c;
+    --accent: #5b8cff; --warn: #f1c40f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--txt);
+    font: 14px/1.5 -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  header {
+    padding: 20px 24px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  }
+  h1 { margin: 0; font: 700 22px ui-monospace, Menlo, Consolas, monospace; letter-spacing: 2px; }
+  .sub { color: var(--dim); }
+  .badge {
+    margin-left: auto; padding: 4px 10px; border: 1px solid var(--line);
+    border-radius: 6px; color: var(--warn); font-size: 12px; white-space: nowrap;
+  }
+  main { padding: 20px 24px; max-width: 1100px; margin: 0 auto; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 22px; }
+  .head { padding: 14px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; }
+  .head h2 { margin: 0; font-size: 15px; }
+  .head .meta { color: var(--dim); font-size: 12px; }
+  button {
+    margin-left: auto; background: #1c2333; color: var(--txt);
+    border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 9px 18px; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: none; }
+  .q { max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pos { color: var(--green); } .neg { color: var(--dim); }
+  .loading { padding: 18px; color: var(--dim); }
+  footer { padding: 18px 24px; color: var(--dim); font-size: 12px; border-top: 1px solid var(--line); }
+  code { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>HERMES</h1>
+  <span class="sub">panel de inteligencia · datos en vivo de Polymarket</span>
+  <span class="badge">SOLO LECTURA · no ejecuta órdenes</span>
+</header>
+
+<main>
+  <section>
+    <div class="head">
+      <h2>Mercados activos</h2>
+      <span class="meta" id="mk-meta">cargando…</span>
+      <button id="mk-refresh">Refrescar</button>
+    </div>
+    <div id="mk-body" class="loading">Cargando mercados…</div>
+  </section>
+
+  <section>
+    <div class="head">
+      <h2>Escáner de arbitraje YES/NO</h2>
+      <span class="meta" id="arb-meta">—</span>
+      <button id="arb-run">Escanear</button>
+    </div>
+    <div id="arb-body" class="loading">Pulsa «Escanear» para buscar pares cuyo coste YES+NO &lt; $1.</div>
+  </section>
+</main>
+
+<footer>
+  HERMES no envía órdenes desde aquí: este panel solo lee datos públicos
+  (<code>gamma-api.polymarket.com</code>, <code>clob.polymarket.com</code>).
+  El arbitraje mostrado es teórico y debe cubrir gas y slippage.
+</footer>
+
+<script>
+const GAMMA = "https://gamma-api.polymarket.com";
+const CLOB  = "https://clob.polymarket.com";
+
+const parseList = (v) => {
+  if (Array.isArray(v)) return v;
+  if (typeof v === "string") { try { return JSON.parse(v); } catch { return []; } }
+  return [];
+};
+const fmtUsd = (n) => n == null ? "—" : "$" + Math.round(n).toLocaleString("en-US");
+const pct = (n) => (n * 100).toFixed(1) + "%";
+
+let MARKETS = [];
+
+async function loadMarkets() {
+  const body = document.getElementById("mk-body");
+  body.className = "loading"; body.textContent = "Cargando mercados…";
+  try {
+    const res = await fetch(`${GAMMA}/markets?active=true&closed=false&limit=40`);
+    const raw = await res.json();
+    const rows = Array.isArray(raw) ? raw : (raw.data || []);
+    MARKETS = rows.map((m) => {
+      const tokens = parseList(m.clobTokenIds).map(String);
+      const prices = parseList(m.outcomePrices).map(parseFloat);
+      return {
+        id: String(m.id || ""),
+        question: m.question || m.title || "",
+        tokenYes: tokens[0] || null,
+        tokenNo: tokens[1] || null,
+        yes: prices[0],
+        vol: m.volumeNum ?? parseFloat(m.volume) ?? null,
+      };
+    }).filter((m) => m.question)
+      .sort((a, b) => (b.vol || 0) - (a.vol || 0));
+
+    renderMarkets(MARKETS.slice(0, 20));
+    document.getElementById("mk-meta").textContent =
+      `${MARKETS.length} mercados · ${new Date().toLocaleTimeString("es-ES")}`;
+  } catch (e) {
+    body.className = "loading"; body.textContent = "Error cargando mercados: " + e.message;
+  }
+}
+
+function renderMarkets(list) {
+  const rows = list.map((m) => {
+    const yes = m.yes != null ? pct(m.yes) : "—";
+    const no = m.yes != null ? pct(1 - m.yes) : "—";
+    return `<tr>
+      <td class="q" title="${m.question.replace(/"/g, "&quot;")}">${m.question}</td>
+      <td class="num">${yes}</td><td class="num">${no}</td>
+      <td class="num">${fmtUsd(m.vol)}</td></tr>`;
+  }).join("");
+  document.getElementById("mk-body").outerHTML =
+    `<table id="mk-body"><thead><tr><th>Mercado</th><th class="num">YES</th>
+     <th class="num">NO</th><th class="num">Volumen</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+async function bestAsk(tokenId) {
+  try {
+    const res = await fetch(`${CLOB}/book?token_id=${encodeURIComponent(tokenId)}`);
+    const data = await res.json();
+    const asks = (data.asks || []).map((a) => parseFloat(a.price)).filter((p) => !isNaN(p));
+    return asks.length ? Math.min(...asks) : null;
+  } catch { return null; }
+}
+
+async function scanArb() {
+  if (!MARKETS.length) await loadMarkets();
+  const body = document.getElementById("arb-body");
+  body.className = "loading"; body.textContent = "Escaneando order books…";
+  const sample = MARKETS.filter((m) => m.tokenYes && m.tokenNo).slice(0, 14);
+
+  const results = await Promise.all(sample.map(async (m) => {
+    const [ay, an] = await Promise.all([bestAsk(m.tokenYes), bestAsk(m.tokenNo)]);
+    if (ay == null || an == null) return null;
+    return { q: m.question, ay, an, cost: ay + an, edge: 1 - (ay + an) };
+  }));
+
+  const valid = results.filter(Boolean).sort((a, b) => b.edge - a.edge);
+  if (!valid.length) { body.className = "loading"; body.textContent = "Sin datos de order book."; return; }
+
+  const rows = valid.map((r) => {
+    const cls = r.edge > 0 ? "pos" : "neg";
+    return `<tr>
+      <td class="q" title="${r.q.replace(/"/g, "&quot;")}">${r.q}</td>
+      <td class="num">${r.ay.toFixed(3)}</td>
+      <td class="num">${r.an.toFixed(3)}</td>
+      <td class="num">${r.cost.toFixed(3)}</td>
+      <td class="num ${cls}">${(r.edge * 100).toFixed(2)}%</td></tr>`;
+  }).join("");
+  body.outerHTML =
+    `<table id="arb-body"><thead><tr><th>Mercado</th><th class="num">ask YES</th>
+     <th class="num">ask NO</th><th class="num">coste</th><th class="num">edge</th></tr></thead>
+     <tbody>${rows}</tbody></table>`;
+  const any = valid.some((r) => r.edge > 0);
+  document.getElementById("arb-meta").textContent =
+    any ? "¡oportunidad detectada!" : "sin arbitraje (coste ≥ $1, normal)";
+}
+
+document.getElementById("mk-refresh").addEventListener("click", loadMarkets);
+document.getElementById("arb-run").addEventListener("click", scanArb);
+loadMarkets();
+</script>
+</body>
+</html>

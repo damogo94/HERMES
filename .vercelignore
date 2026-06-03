@@ -1,0 +1,8 @@
+# El despliegue de Vercel solo necesita web/ (sitio estático).
+# Excluimos el backend Python y artefactos pesados/locales.
+.venv/
+data_store/
+__pycache__/
+*.pyc
+tests/
+.git/
