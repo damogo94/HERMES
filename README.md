@@ -7,6 +7,8 @@ combinando un bot autónomo y market-making.
 > ⚠️ Software financiero. Puede perder dinero. Se construye **por fases** y arranca en
 > **modo simulación (DRY-RUN)**: nada real se ejecuta hasta validar la estrategia.
 
+📓 **Bitácora del proyecto** (qué construimos, decisiones y hallazgos): [`docs/BITACORA.md`](docs/BITACORA.md)
+
 ## Principio de seguridad
 
 `HERMES_DRY_RUN=true` es el **interruptor maestro** (por defecto `true`). Con DRY-RUN activo,
