@@ -465,13 +465,24 @@ def _cmd_cross_arb(args: argparse.Namespace) -> None:
         print("Faltan dependencias. Instala con: pip install -e .")
         return
 
-    print(f"Buscando eventos compartidos Polymarket↔Kalshi "
+    llm_client = None
+    if args.llm:
+        from hermes.utils.llm_client import LLMClient, llm_available
+        if not llm_available():
+            print("Para --llm configura HERMES_LLM_API_KEY y HERMES_LLM_MODEL en .env")
+            print("(p. ej. una clave de OpenRouter). Abortando.")
+            return
+        llm_client = LLMClient()
+
+    modo = "con juez LLM" if llm_client else "heurístico (sin LLM)"
+    print(f"Buscando eventos compartidos Polymarket↔Kalshi [{modo}] "
           f"(sim≥{args.min_sim})… puede tardar.")
     gamma, kalshi = GammaClient(), KalshiClient()
     try:
         pairs = find_cross_arb(
             gamma, kalshi,
             poly_limit=args.poly, event_limit=args.events, min_sim=args.min_sim,
+            llm_client=llm_client,
         )
     finally:
         gamma.close()
@@ -489,13 +500,17 @@ def _cmd_cross_arb(args: argparse.Namespace) -> None:
               f"PM {c.poly_yes:.2f} / K {c.kalshi_yes:.2f}")
         print(f"     PM: {c.poly_question[:64]}")
         print(f"     K : {c.kalshi_title[:64]}")
+        if c.llm_reason:
+            print(f"     LLM: {c.llm_reason}")
     print(_LINE)
-    print(" ⚠️  Estos son matches por PARECIDO DE TÍTULO, casi todos FALSOS.")
-    print(" Un gap grande normalmente significa que NO son el mismo evento")
-    print(" (p. ej. 'ganar' la nominación ≠ 'presentarse'), no un arbitraje.")
-    print(" El emparejamiento por título es solo un punto de partida: hace falta")
-    print(" semántica real (LLM), alinear el outcome EXACTO y verificar a mano las")
-    print(" reglas de resolución. Operar un mismatch = pérdida garantizada.")
+    if llm_client is not None:
+        print(" Verificados por un LLM como el MISMO evento. Aun así, el LLM puede")
+        print(" equivocarse: revisa A MANO las reglas de resolución (fuente, fecha,")
+        print(" edge cases) antes de operar. Requiere cuentas y capital en ambos venues.")
+    else:
+        print(" ⚠️  Matches por PARECIDO DE TÍTULO, casi todos FALSOS. Un gap grande")
+        print(" suele significar que NO son el mismo evento ('ganar' ≠ 'presentarse').")
+        print(" Usa --llm para filtrar con un juez semántico (requiere clave LLM).")
 
 
 def main() -> None:
@@ -591,6 +606,7 @@ def main() -> None:
     p_cross.add_argument("--poly", type=int, default=300, help="Mercados Polymarket a comparar.")
     p_cross.add_argument("--events", type=int, default=600, help="Eventos Kalshi a comparar.")
     p_cross.add_argument("--min-sim", type=float, default=0.4, dest="min_sim", help="Similitud mínima (Jaccard).")
+    p_cross.add_argument("--llm", action="store_true", help="Filtra candidatos con un juez LLM semántico.")
     p_cross.add_argument("-n", "--limit", type=int, default=15, help="Candidatos a mostrar.")
 
     args = parser.parse_args()

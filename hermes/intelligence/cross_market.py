@@ -17,8 +17,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from hermes.core.logging import get_logger
 from hermes.data.gamma import GammaClient
 from hermes.data.kalshi import KalshiClient
+
+logger = get_logger("intelligence.cross_market")
 
 _STOP = set(
     "will the a an of in on by to be is are at for and or with this that yes no "
@@ -55,11 +58,31 @@ class CrossPair:
     poly_yes: float
     kalshi_yes: float
     kalshi_ticker: str
+    llm_reason: str = ""   # justificación del juez LLM (si se usó)
 
     @property
     def gap(self) -> float:
         """Discrepancia de precio YES entre venues (≈ beneficio bruto por par)."""
         return abs(self.poly_yes - self.kalshi_yes)
+
+
+_JUDGE_SYSTEM = (
+    "Eres un verificador ESTRICTO de mercados de predicción. Te doy dos mercados: "
+    "A (Polymarket) y B (Kalshi). Decide si se refieren EXACTAMENTE al mismo evento "
+    "y resolverían con el MISMO resultado y reglas. Sé estricto: 'ganar' no es lo "
+    "mismo que 'presentarse'; sujetos, umbrales o fechas distintos => false. Ante la "
+    "duda, false. Responde SOLO JSON: {\"same\": true|false, \"reason\": \"<breve>\"}."
+)
+
+
+def judge_same(llm, poly_q: str, kalshi_t: str) -> tuple[bool, str]:
+    """Pregunta al LLM si dos mercados son el mismo evento+resolución."""
+    try:
+        d = llm.chat_json(_JUDGE_SYSTEM, f"A (Polymarket): {poly_q}\nB (Kalshi): {kalshi_t}")
+        return bool(d.get("same")), str(d.get("reason", ""))[:140]
+    except Exception as e:  # noqa: BLE001
+        logger.debug("juez LLM falló: %s", e)
+        return False, "error LLM"
 
 
 def find_cross_arb(
@@ -69,6 +92,8 @@ def find_cross_arb(
     event_limit: int = 600,
     min_sim: float = 0.4,
     top_price: int = 25,
+    llm_client=None,
+    llm_top: int = 25,
 ) -> list[CrossPair]:
     """Empareja mercados Polymarket con EVENTOS de Kalshi (filtrados por categoría)
     y mide el gap de precio. El precio de Kalshi se consulta solo para los mejores
@@ -105,9 +130,21 @@ def find_cross_arb(
 
     matched.sort(reverse=True, key=lambda x: x[0])
 
-    # Precio de Kalshi solo para los mejores candidatos (acota llamadas).
+    # Si hay LLM: juzga los candidatos (¿mismo evento+resolución?) y descarta los
+    # falsos (p. ej. 'ganar' vs 'presentarse'). Si no, se mantiene la heurística.
     results: list[CrossPair] = []
-    for sim, p, e, title in matched[:top_price]:
+    judged = 0
+    for sim, p, e, title in matched:
+        if len(results) >= top_price:
+            break
+        reason = ""
+        if llm_client is not None:
+            if judged >= llm_top:
+                break
+            judged += 1
+            same, reason = judge_same(llm_client, p.question, title)
+            if not same:
+                continue
         ky, kt = kalshi.event_yes_price(e.get("event_ticker", ""))
         if ky is None:
             continue
@@ -118,6 +155,7 @@ def find_cross_arb(
             poly_yes=p.yes_price,
             kalshi_yes=ky,
             kalshi_ticker=kt or e.get("event_ticker", ""),
+            llm_reason=reason,
         ))
     results.sort(key=lambda c: c.gap, reverse=True)
     return results

@@ -118,9 +118,10 @@ fichero `data_store/STOP` detienen todo.
 > ⚠️ **arb cross-market** (Polymarket↔Kalshi): los datos de Kalshi se leen sin
 > auth (`KalshiClient`), pero el *matching* por título genera **falsos positivos
 > peligrosos** — empareja "ganar la nominación" con "presentarse a la nominación"
-> y muestra un "gap" del 70% que NO es arb. Para ser usable necesita matching
-> semántico (LLM), alineación del outcome exacto y verificación de reglas de
-> resolución. No usable todavía.
+> y muestra un "gap" del 70% que NO es arb. **Mitigado** con `cross-arb --llm`: un
+> juez LLM (señal, sin autoridad de gasto) descarta los candidatos que no son el
+> mismo evento+resolución (requiere `HERMES_LLM_API_KEY` en `.env`). Aun así hay
+> que verificar las reglas de resolución a mano y operar en ambos venues.
 >
 > Conclusión: **ninguna estrategia validada todavía**. HERMES sigue en paper. El
 > valor del proyecto es precisamente esta disciplina — ha cazado varios espejismos
