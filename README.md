@@ -80,6 +80,7 @@ hermes whales                 # top carteras por beneficio (leaderboard)
 hermes validate-whales        # valida la tesis whale-follow (edge vs baseline)
 hermes whales-oos             # validación OOS: split temporal sin look-ahead
 hermes whales-net             # edge NETO tras fricciones de copia + breakeven
+hermes cross-arb              # candidatos de arb cross-market (Polymarket↔Kalshi)
 ```
 
 Todo es solo lectura/simulación; nada de esto necesita wallet ni envía órdenes.
@@ -114,6 +115,14 @@ fichero `data_store/STOP` detienen todo.
 > **≈0** (selección +−0.2 vs control −0.4): el rendimiento pasado de una cartera
 > **no predice** el futuro. Copiar el leaderboard no tiene edge identificable.
 >
+> ⚠️ **arb cross-market** (Polymarket↔Kalshi): los datos de Kalshi se leen sin
+> auth (`KalshiClient`), pero el *matching* por título genera **falsos positivos
+> peligrosos** — empareja "ganar la nominación" con "presentarse a la nominación"
+> y muestra un "gap" del 70% que NO es arb. Para ser usable necesita matching
+> semántico (LLM), alineación del outcome exacto y verificación de reglas de
+> resolución. No usable todavía.
+>
 > Conclusión: **ninguna estrategia validada todavía**. HERMES sigue en paper. El
-> valor del proyecto es precisamente esta disciplina — cazó dos espejismos
-> (estrategias de precio y survivorship de whales) antes de arriesgar un céntimo.
+> valor del proyecto es precisamente esta disciplina — ha cazado varios espejismos
+> (estrategias de precio, survivorship de whales, falsos arbs cross-market) antes
+> de arriesgar un céntimo.

@@ -12,6 +12,7 @@ Componentes:
 """
 
 from hermes.intelligence.arbitrage import ArbitrageDetector
+from hermes.intelligence.cross_market import CrossPair, find_cross_arb
 from hermes.intelligence.models import Opportunity
 from hermes.intelligence.scanner import Scanner
 from hermes.intelligence.whales import (
@@ -28,6 +29,8 @@ __all__ = [
     "Opportunity",
     "ArbitrageDetector",
     "Scanner",
+    "find_cross_arb",
+    "CrossPair",
     "top_whales",
     "whale_follow_report",
     "verdict",

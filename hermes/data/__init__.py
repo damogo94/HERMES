@@ -14,6 +14,7 @@ from hermes.data.archive import ArchiveClient
 from hermes.data.clob import ClobReadClient
 from hermes.data.data_api import DataAPIClient
 from hermes.data.gamma import GammaClient
+from hermes.data.kalshi import KalshiClient, KalshiMarket
 from hermes.data.models import Market, OrderBook, OrderLevel, Trade
 
 __all__ = [
@@ -21,6 +22,8 @@ __all__ = [
     "ClobReadClient",
     "ArchiveClient",
     "DataAPIClient",
+    "KalshiClient",
+    "KalshiMarket",
     "Market",
     "OrderBook",
     "OrderLevel",

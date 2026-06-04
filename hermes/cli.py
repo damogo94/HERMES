@@ -456,6 +456,48 @@ def _cmd_whales_net(args: argparse.Namespace) -> None:
     print(" medio puede inflarse con tokens baratos. Aún no es OOS de universo.")
 
 
+def _cmd_cross_arb(args: argparse.Namespace) -> None:
+    try:
+        from hermes.data.gamma import GammaClient
+        from hermes.data.kalshi import KalshiClient
+        from hermes.intelligence.cross_market import find_cross_arb
+    except ImportError:
+        print("Faltan dependencias. Instala con: pip install -e .")
+        return
+
+    print(f"Buscando eventos compartidos Polymarket↔Kalshi "
+          f"(sim≥{args.min_sim})… puede tardar.")
+    gamma, kalshi = GammaClient(), KalshiClient()
+    try:
+        pairs = find_cross_arb(
+            gamma, kalshi,
+            poly_limit=args.poly, event_limit=args.events, min_sim=args.min_sim,
+        )
+    finally:
+        gamma.close()
+        kalshi.close()
+
+    print(_LINE)
+    print(f" CANDIDATOS de arb cross-market  ({len(pairs)})")
+    print(_LINE)
+    if not pairs:
+        print(" Sin candidatos por encima del umbral de similitud.")
+        print(" (Los eventos verdaderamente compartidos entre venues son pocos.)")
+        return
+    for c in pairs[: args.limit]:
+        print(f" gap {c.gap * 100:4.0f}c · sim {c.similarity:.2f} · "
+              f"PM {c.poly_yes:.2f} / K {c.kalshi_yes:.2f}")
+        print(f"     PM: {c.poly_question[:64]}")
+        print(f"     K : {c.kalshi_title[:64]}")
+    print(_LINE)
+    print(" ⚠️  Estos son matches por PARECIDO DE TÍTULO, casi todos FALSOS.")
+    print(" Un gap grande normalmente significa que NO son el mismo evento")
+    print(" (p. ej. 'ganar' la nominación ≠ 'presentarse'), no un arbitraje.")
+    print(" El emparejamiento por título es solo un punto de partida: hace falta")
+    print(" semántica real (LLM), alinear el outcome EXACTO y verificar a mano las")
+    print(" reglas de resolución. Operar un mismatch = pérdida garantizada.")
+
+
 def main() -> None:
     # Salida UTF-8 en consolas Windows (evita mojibake con acentos y «—»).
     try:
@@ -545,6 +587,12 @@ def main() -> None:
     p_net.add_argument("--source", default="leaderboard", choices=["leaderboard", "random"],
                        help="Universo: leaderboard o random.")
 
+    p_cross = sub.add_parser("cross-arb", help="Candidatos de arb cross-market (Polymarket↔Kalshi).")
+    p_cross.add_argument("--poly", type=int, default=300, help="Mercados Polymarket a comparar.")
+    p_cross.add_argument("--events", type=int, default=600, help="Eventos Kalshi a comparar.")
+    p_cross.add_argument("--min-sim", type=float, default=0.4, dest="min_sim", help="Similitud mínima (Jaccard).")
+    p_cross.add_argument("-n", "--limit", type=int, default=15, help="Candidatos a mostrar.")
+
     args = parser.parse_args()
 
     if args.command == "markets":
@@ -567,6 +615,8 @@ def main() -> None:
         _cmd_whales_oos(args)
     elif args.command == "whales-net":
         _cmd_whales_net(args)
+    elif args.command == "cross-arb":
+        _cmd_cross_arb(args)
     else:  # status (por defecto)
         _cmd_status(args)
 
