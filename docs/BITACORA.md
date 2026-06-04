@@ -1,7 +1,7 @@
 # Bitácora de HERMES
 
 Registro de qué construimos, qué decidimos y qué descubrimos. Lo más valioso del
-proyecto no es el código: es la **disciplina de validación** que ha cazado tres
+proyecto no es el código: es la **disciplina de validación** que ha cazado cuatro
 "edges" falsos antes de arriesgar un solo euro.
 
 - **Repo:** https://github.com/damogo94/HERMES
@@ -77,6 +77,7 @@ hermes whales                 # leaderboard de carteras por beneficio
 hermes validate-whales        # whale-follow: edge vs baseline aleatorio
 hermes whales-oos --source random   # validación OOS (split temporal, sin look-ahead)
 hermes whales-net             # edge neto tras fricciones de copia
+hermes cross-arb [--llm]      # candidatos de arb cross-market (Polymarket↔Kalshi)
 ```
 
 ---
@@ -110,12 +111,31 @@ mercado** (Gamma) — no necesita histórico de precios.
   un universo limpio, el rendimiento pasado **no predice** el futuro. Copiar el
   leaderboard **no tiene edge identificable**.
 
+### 5.3 arb cross-market (mismo evento en Polymarket vs Kalshi)
+Tesis *mecánica* (no estadística): si el mismo evento cotiza distinto en dos
+venues y ambos resuelven igual, el beneficio está garantizado.
+
+- **Kalshi se lee sin auth** (`api.elections.kalshi.com`) → `KalshiClient`. Pero
+  su lista de mercados está **inundada de combos de parlay deportivo**; los
+  eventos reales hay que pescarlos por el endpoint `events` (traen `category`).
+- **Matching ingenuo por título = trampa peligrosa.** El primer matcher emparejó
+  "**win** the 2028 nomination" (Polymarket) con "**run** for the 2028 nomination"
+  (Kalshi) y mostró un "gap del 70%". No es arb: son preguntas distintas. Operarlo
+  = pérdida garantizada.
+- **Mitigación: juez LLM** (`cross-arb --llm`). La heurística genera candidatos y
+  un LLM (solo señal, sin autoridad de gasto) descarta los que no son el mismo
+  evento+resolución. **Pendiente de probar en vivo** (falta clave LLM en `.env`).
+- **Veredicto: NO usable todavía.** El LLM lee títulos, no las reglas de
+  resolución completas → aun un match confirmado requiere verificación humana.
+  Y ejecutar exige cuentas + capital en ambos venues (Kalshi pide KYC).
+
 ### Resumen
 | Estrategia | Tesis | Veredicto |
 |------------|-------|-----------|
 | mean reversion | patrón de precio | sin edge (tras costes) |
 | momentum | patrón de precio | sin edge (tras costes) |
 | whale-follow | copiar ganadores | sin edge (survivorship) |
+| arb cross-market | mismo evento, 2 venues | no usable (matching/resolución) |
 
 ---
 
@@ -128,10 +148,14 @@ mercado** (Gamma) — no necesita histórico de precios.
 2. **Casi todo "edge" es un espejismo.** Cada estrategia parecía ganar al
    principio y se caía en la prueba rigurosa (costes, out-of-sample, survivorship).
 3. **La validación es el producto.** El mayor valor de HERMES es haber dicho "no"
-   tres veces antes de arriesgar dinero.
+   cuatro veces antes de arriesgar dinero.
 4. **Honestidad por defecto.** Métrica robusta (retorno compuesto, edge =
    win_rate − precio) por encima de cifras infladas; caveats siempre visibles,
    también en el dashboard.
+5. **Cuidado con los falsos positivos que parecen oro.** El "arb del 70%" entre
+   "ganar" y "presentarse" es el ejemplo perfecto: una herramienta que grita
+   oportunidades sin filtro semántico es peligrosa. De ahí el juez LLM — pero el
+   LLM juzga (señal), nunca decide gasto.
 
 ---
 
@@ -139,8 +163,10 @@ mercado** (Gamma) — no necesita histórico de precios.
 
 - **Python 3.12** (venv local). Deps: `requests`, `httpx`, `pandas`, `polars`,
   `pyarrow`, `websockets`, `python-dotenv`.
-- **Datos:** Gamma, CLOB, Data API, leaderboard (`lb-api`) y archivo de pmxt
-  (Parquet) — todo público, solo lectura.
+- **Datos:** Gamma, CLOB, Data API, leaderboard (`lb-api`), archivo de pmxt
+  (Parquet) y **Kalshi** (`api.elections.kalshi.com`) — todo público, solo lectura.
+- **LLM (opcional, solo señal):** `LLMClient` compatible OpenAI/OpenRouter para el
+  juez semántico de cross-arb. Nunca decide gasto.
 - **Dashboard:** HTML/JS estático (sin build), 3 pestañas (Panel · Whales ·
   Sistema), desplegado en **Vercel** con auto-deploy por Git.
 
@@ -149,14 +175,21 @@ mercado** (Gamma) — no necesita histórico de precios.
 ## 8. Estado actual y próximos pasos
 
 **Estado:** infraestructura completa y segura; **ninguna estrategia validada**;
-todo en paper. Sin wallet ni ejecución real.
+todo en paper. Sin wallet ni ejecución real. Kalshi integrado (solo lectura).
 
-**Ideas con tesis que NO dependa de survivorship:**
-1. **Arb cross-market** — el mismo evento en dos mercados/venues con precios
-   distintos = beneficio *mecánico*, no estadístico. Requiere emparejar eventos
-   (posible capa LLM) y añadir Kalshi.
+**Pendiente inmediato:**
+- **Probar el juez LLM de cross-arb en vivo** (`cross-arb --llm`) — falta una clave
+  LLM en `.env` (`HERMES_LLM_API_KEY` + `HERMES_LLM_MODEL`, p. ej. OpenRouter).
+
+**Caminos abiertos:**
+1. **Arb cross-market con LLM** — la única tesis *mecánica* que queda. Si el juez
+   LLM filtra bien, los candidatos restantes son el mismo evento de verdad y un
+   gap de precio sí sería arbitraje. Falta: verificación humana de reglas de
+   resolución y ejecución dual-venue.
 2. **Nichos ineficientes** — mercados poco líquidos / no-cripto donde no llega el
    "smart money", en vez del crowd de cripto 5-min.
+3. **Consolidar HERMES como herramienta de inteligencia** (monitorización,
+   alertas, comparación cross-venue) sin operar — valioso por sí mismo.
 
 **Antes de la Fase 5 (dinero real):** una estrategia debe pasar la validación con
 **universo limpio**; luego wallet desechable, límites mínimos y humano en el loop.
